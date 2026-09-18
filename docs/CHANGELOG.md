@@ -114,6 +114,8 @@ DeviceWise, and ships the configuration UI, service packaging and tests.
 - `docs/architecture.md` — architecture, the FastAPI decision record and the
   design tie-breaks.
 - `docs/build.md` — per-platform Snap7 build and install instructions.
+- `docs/release-checklist.md` — manual pre-release verification standing in for
+  CI on Windows and on real PLC hardware.
 
 [Unreleased]: https://github.com/flukesan/snap7_gateway/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/flukesan/snap7_gateway/releases/tag/v0.1.0

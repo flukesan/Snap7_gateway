@@ -58,6 +58,7 @@ snap7-gateway run --data-dir ./gw-data --port 8443
 | [docs/MANUAL.md](docs/MANUAL.md) | Operator manual: installation, every page, every setting, troubleshooting |
 | [docs/architecture.md](docs/architecture.md) | Architecture, the FastAPI decision record, concurrency model, design tie-breaks |
 | [docs/build.md](docs/build.md) | Building and installing the Snap7 C library per platform and architecture |
+| [docs/release-checklist.md](docs/release-checklist.md) | Manual pre-release verification: service restart on both platforms, PLC and DeviceWise cutover, security spot checks |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Release history |
 
 ## Tests
