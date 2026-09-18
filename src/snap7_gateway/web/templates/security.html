@@ -5,6 +5,7 @@
 
 <section>
   <h2>Accounts</h2>
+  <div class="table-wrap">
   <table>
     <thead>
       <tr><th>{{ t('common.user') }}</th><th>Role</th><th>{{ t('common.enabled') }}</th>
@@ -21,6 +22,7 @@
         <td>{{ fmt_ts(account.last_login_at) }}</td>
         <td>{{ fmt_ts(account.locked_until) }}</td>
         <td class="actions">
+          <div class="actions-row">
           {% if user.role == 'admin' %}
           <form method="post" action="/users/{{ account.id }}/role" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -49,6 +51,8 @@
             <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
           </form>
           {% else %}-{% endif %}
+        
+          </div>
         </td>
       </tr>
       {% if user.role == 'admin' %}
@@ -67,6 +71,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 
   {% if user.role == 'admin' %}
   <h3>{{ t('action.add') }}</h3>

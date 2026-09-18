@@ -97,6 +97,15 @@ CATALOG: dict[str, dict[str, str]] = {
         "th": "เกตเวย์นี้ยังใช้รหัสผ่านเริ่มต้นอยู่ กรุณาเข้าสู่ระบบและเปลี่ยนรหัสผ่านทันที "
               "ระหว่างนี้ผู้ที่เข้าถึงแอดเดรสนี้ได้สามารถยึดเครื่องไปได้",
     },
+    "login.timed_out": {
+        "en": "You were signed out because this page was left idle.",
+        "th": "คุณถูกออกจากระบบเนื่องจากไม่มีการใช้งานหน้านี้เป็นเวลานาน",
+    },
+    "idle.warning": {
+        "en": "No activity for a while - signing you out in {seconds}s.",
+        "th": "ไม่มีการใช้งานสักพักแล้ว ระบบจะออกจากระบบให้ใน {seconds} วินาที",
+    },
+    "idle.stay": {"en": "Stay signed in", "th": "ใช้งานต่อ"},
     "pwchange.heading": {"en": "Change your password", "th": "เปลี่ยนรหัสผ่านของคุณ"},
     "pwchange.forced": {
         "en": "Your password must be changed before you can use the gateway.",

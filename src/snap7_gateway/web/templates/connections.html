@@ -33,6 +33,7 @@
       </td>
       <td>{{ fmt_ts(h.last_success_at) if h else '-' }}</td>
       <td class="actions">
+          <div class="actions-row">
         {% if user.role == 'admin' %}
         <a href="/connections/{{ connection.id }}/edit">{{ t('action.edit') }}</a>
         <form method="post" action="/connections/{{ connection.id }}/test" class="inline">
@@ -45,7 +46,9 @@
           <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
         </form>
         {% else %}-{% endif %}
-      </td>
+      
+          </div>
+        </td>
     </tr>
     {% if h and h.last_error %}
     <tr class="subrow"><td colspan="9" class="bad wrap">{{ h.last_error }}</td></tr>

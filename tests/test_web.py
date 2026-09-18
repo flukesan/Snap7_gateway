@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from contextlib import asynccontextmanager
 
 import httpx
@@ -986,5 +987,152 @@ class TestSymbolImport:
                 assert runtime.db.list_tags(connection.id) == []
             finally:
                 await viewer.aclose()
+
+        run(scenario, tmp_path)
+
+
+class TestIdleAutoLogout:
+    """The browser signs an unattended page out, mirroring the server timeout."""
+
+    def test_the_page_publishes_the_servers_own_timeout(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            page = await client.get("/")
+            expected = runtime.auth.sessions.idle_timeout_seconds
+            assert f'data-idle-timeout="{expected}"' in page.text
+            assert 'id="idle-warning"' in page.text
+            assert "data-csrf-token=" in page.text
+
+        run(scenario, tmp_path)
+
+    def test_changing_the_setting_changes_what_the_page_uses(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            runtime.db.set_setting("session_idle_timeout_minutes", "5")
+            page = await client.get("/")
+            assert 'data-idle-timeout="300"' in page.text
+
+        run(scenario, tmp_path)
+
+    def test_signed_out_pages_carry_no_timer(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            assert "data-idle-timeout" not in page.text
+            assert 'id="idle-warning"' not in page.text
+
+        run(scenario, tmp_path)
+
+    def test_keepalive_reports_the_remaining_time(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/")).text)
+            response = await client.post(
+                "/api/keepalive", headers={"X-CSRF-Token": token}
+            )
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["idle_timeout_seconds"] == runtime.auth.sessions.idle_timeout_seconds
+            assert 0 < payload["expires_in"] <= payload["idle_timeout_seconds"]
+
+        run(scenario, tmp_path)
+
+    def test_keepalive_extends_the_session(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/")).text)
+            user_id = runtime.db.get_user("admin").id
+
+            # Wind the stored expiry back, then prove a keepalive moves it on.
+            session = runtime.db.list_sessions_for_user(user_id)[0]
+            runtime.db.touch_session(session.token_hash, time.time() + 60)
+            before = runtime.db.get_session(session.token_hash).expires_at
+
+            response = await client.post("/api/keepalive", headers={"X-CSRF-Token": token})
+            assert response.status_code == 200
+            after = runtime.db.get_session(session.token_hash).expires_at
+            assert after > before
+
+        run(scenario, tmp_path)
+
+    def test_keepalive_needs_a_session(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            assert (await client.post("/api/keepalive")).status_code == 401
+
+        run(scenario, tmp_path)
+
+    def test_keepalive_needs_the_csrf_token(self, tmp_path) -> None:
+        """Otherwise any page could hold someone's session open for them."""
+
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            assert (await client.post("/api/keepalive")).status_code == 403
+            assert (
+                await client.post("/api/keepalive", headers={"X-CSRF-Token": "wrong"})
+            ).status_code == 403
+
+        run(scenario, tmp_path)
+
+    def test_an_idle_logout_explains_itself(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/")).text)
+            response = await client.post(
+                "/logout", data={"csrf_token": token, "reason": "timeout"}
+            )
+            assert response.headers["location"] == "/login?timeout=1"
+
+            page = await client.get("/login?timeout=1")
+            assert "left idle" in page.text
+            # ...and the session really is gone.
+            assert (await client.get("/")).headers["location"].startswith("/login")
+
+        run(scenario, tmp_path)
+
+    def test_an_ordinary_logout_is_unchanged(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/")).text)
+            response = await client.post("/logout", data={"csrf_token": token})
+            assert response.headers["location"] == "/login"
+            page = await client.get("/login")
+            assert "left idle" not in page.text
+
+        run(scenario, tmp_path)
+
+    def test_the_script_that_drives_it_is_served(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            response = await client.get("/static/app.js")
+            assert response.status_code == 200
+            assert "/api/keepalive" in response.text
+            assert "idle-warning" in response.text
+
+        run(scenario, tmp_path)
+
+
+class TestLayout:
+    """Structural checks for the fixes to the reported layout problems."""
+
+    def test_account_actions_are_wrapped_so_they_stay_in_the_table(
+        self, tmp_path
+    ) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            page = await client.get("/security")
+            assert 'class="actions-row"' in page.text
+            assert 'class="table-wrap"' in page.text
+
+        run(scenario, tmp_path)
+
+    def test_the_stylesheet_keeps_the_masthead_button_readable(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            response = await client.get("/static/app.css")
+            assert response.status_code == 200
+            # The generic .link-button is accent-blue on an accent-blue bar.
+            assert ".masthead-user .link-button" in response.text
+            # Grid controls align on their bottom edge regardless of label height.
+            assert ".grid > div > select" in response.text
+            assert "margin-top: auto" in response.text
+            # Action cells flow instead of forcing the table wider than its panel.
+            assert ".actions-row" in response.text
 
         run(scenario, tmp_path)

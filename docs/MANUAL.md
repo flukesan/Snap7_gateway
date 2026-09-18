@@ -98,13 +98,39 @@ snap7-gateway run --data-dir ./gw-data --port 8443
 Install by hand instead of using the script:
 
 ```bash
+# Linux / macOS
 python3.13 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/pip install --no-deps -e .
 ```
 
-`--no-deps` on the second line is deliberate: the requirements file has already
-decided every version, and letting pip re-resolve would quietly defeat the pins.
+```powershell
+# Windows
+py -3.13 -m venv .venv
+.venv\Scripts\pip install -r requirements-windows.txt
+.venv\Scripts\pip install --no-deps -e .
+```
+
+With the virtualenv already activated, on either platform, drop the paths:
+
+```
+pip install -r requirements.txt
+pip install --no-deps -e .
+```
+
+Run these from the project root — the `.` in the last command *is* the project,
+so `pip` has to be able to see `pyproject.toml` in the current directory.
+
+`--no-deps` is deliberate: the requirements file has already decided every
+version, and letting pip re-resolve would quietly defeat the pins.
+
+**That last command is what creates the `snap7-gateway` command.** Until it has
+run, the executable does not exist. If you would rather not install the package
+at all, every command also works as a module:
+
+```
+python -m snap7_gateway run --data-dir ./gw-data --port 8443
+```
 
 A test (`tests/test_packaging.py`) fails if `requirements.txt` and
 `pyproject.toml` ever drift apart, or if the lock file goes stale.
@@ -514,6 +540,24 @@ Cookies are `HttpOnly`, `SameSite=Lax` and `Secure` over HTTPS. Only the SHA-256
 of the session token is stored. Sessions end on logout, on password change, when
 the account is disabled or deleted, and at either timeout.
 
+**Automatic sign-out.** A page left idle signs itself out when the idle timeout
+runs out, so a gateway does not sit open on an unattended screen in the control
+room until somebody happens to click something. A warning strip appears near the
+end of the window with a countdown and a **Stay signed in** button; any typing,
+clicking or scrolling also resets it.
+
+Two things are worth knowing about how this behaves:
+
+* It follows the **Idle timeout** setting above - there is no second timer to
+  configure, and changing that setting changes both the server's enforcement and
+  the browser's countdown.
+* The browser only tells the server to extend a session **after real
+  interaction**. A page that pinged on a plain timer would keep a session alive
+  next to an empty chair, which is the opposite of what an idle timeout is for.
+
+If JavaScript is disabled, the automatic sign-out simply does not happen; the
+server still enforces exactly the same timeout at the next request.
+
 ### 7.5 TLS
 
 HTTPS is on by default. On first run — and whenever the stored certificate is
@@ -639,6 +683,29 @@ rate limiting.
 ---
 
 ## 14. Troubleshooting
+
+**`'snap7-gateway' is not recognized` / `command not found`.**
+The package has not been installed into the virtualenv yet. From the project
+root, with the virtualenv activated:
+
+```
+pip install --no-deps -e .
+```
+
+Then `snap7-gateway --version` should answer. If it still does not, the
+virtualenv is probably not active — its name appears in the prompt, like
+`(myvenv) C:\...>` — or its `Scripts` / `bin` directory is not on `PATH`. This
+always works regardless:
+
+```
+python -m snap7_gateway run --data-dir ./gw-data --port 8443
+```
+
+**A pasted command fails with `'<something>' is not recognized`.**
+Check that the prompt did not come along with it. Copying
+`C:\Users\you\Snap7_gateway>pip install --no-deps -e .` from a terminal
+transcript makes the shell try to run a program called `Snap7_gateway>pip`. The
+command is only the part after the `>`.
 
 **The web UI does not answer.**
 `systemctl status snap7-gateway`, then `journalctl -u snap7-gateway -n 100`.

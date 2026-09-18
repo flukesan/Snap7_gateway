@@ -215,3 +215,40 @@ class TestPythonVersion:
         powershell = (PROJECT_ROOT / "scripts" / "setup-venv.ps1").read_text(encoding="utf-8")
         assert "(3, 13)" in shell
         assert "(3,13)" in powershell or "(3, 13)" in powershell
+
+
+class TestEntryPoints:
+    """Both documented ways of starting the gateway have to keep working."""
+
+    def test_the_console_script_is_declared(self, pyproject) -> None:
+        scripts = pyproject["project"]["scripts"]
+        assert scripts["snap7-gateway"] == "snap7_gateway.service.cli:main"
+
+    def test_the_package_is_runnable_as_a_module(self) -> None:
+        """`python -m snap7_gateway` is the fallback the manual points at when
+        the Scripts/bin directory is not on PATH."""
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "snap7_gateway", "--version"],
+            capture_output=True,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "snap7-gateway" in result.stdout
+
+    def test_the_service_subpackage_is_runnable_too(self) -> None:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "snap7_gateway.service", "--version"],
+            capture_output=True,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr

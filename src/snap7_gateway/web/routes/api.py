@@ -7,12 +7,37 @@ the CSRF-protected form routes.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+import time
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from .. import deps
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/keepalive", dependencies=[Depends(deps.require_csrf)])
+async def keepalive(request: Request) -> JSONResponse:
+    """Extend the session and report how long it has left.
+
+    Called by the browser only after real user activity - every authenticated
+    request slides the idle expiry forward, so a page that polled on a timer
+    would keep a session alive next to an empty chair, which is the exact
+    opposite of what an idle timeout is for.
+
+    The response lets the page re-sync its countdown with the server rather than
+    trusting a timer that a background tab may have throttled.
+    """
+    deps.require_user(request)
+    context = deps.get_session(request)
+    assert context is not None
+    return JSONResponse(
+        {
+            "expires_in": max(0, int(context.session.expires_at - time.time())),
+            "idle_timeout_seconds": deps.get_runtime(request).auth.sessions.idle_timeout_seconds,
+        }
+    )
 
 
 @router.get("/status")

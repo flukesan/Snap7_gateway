@@ -61,6 +61,7 @@
           {% if area.status_detail %}<br><small>{{ area.status_detail }}</small>{% endif %}
         </td>
         <td class="actions">
+          <div class="actions-row">
           {% if user.role == 'admin' %}
           {% if not mirror_all %}
           <form method="post" action="/tags/areas/{{ area.id }}/exposure" class="inline">
@@ -82,6 +83,8 @@
             <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
           </form>
           {% else %}-{% endif %}
+        
+          </div>
         </td>
       </tr>
     {% endfor %}
@@ -109,6 +112,7 @@
         <td>{{ row.value }}</td>
         <td class="wrap"><small>{{ row.note }}</small></td>
         <td class="actions">
+          <div class="actions-row">
           {% if user.role == 'admin' %}
           <form method="post" action="/tags/{{ row.tag.id }}/delete" class="inline"
                 data-confirm="Delete tag '{{ row.tag.name }}'?">
@@ -116,6 +120,8 @@
             <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
           </form>
           {% else %}-{% endif %}
+        
+          </div>
         </td>
       </tr>
     {% endfor %}

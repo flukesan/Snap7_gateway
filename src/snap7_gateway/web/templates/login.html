@@ -7,6 +7,9 @@
   {% if request.query_params.get('changed') %}
   <p class="flash flash-ok">{{ t('pwchange.success') }}</p>
   {% endif %}
+  {% if request.query_params.get('timeout') %}
+  <p class="flash flash-warn">{{ t('login.timed_out') }}</p>
+  {% endif %}
   {% if error %}
   <p class="flash flash-error">{{ error }}</p>
   {% endif %}

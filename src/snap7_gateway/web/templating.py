@@ -18,14 +18,20 @@ def render(request: Request, template: str, context: dict[str, Any] | None = Non
     CSRF token, so no route has to remember them.
     """
     session = deps.get_session(request)
+    runtime = deps.get_runtime(request)
     payload: dict[str, Any] = {
         "t": deps.get_translator(request),
         "session": session,
         "user": session.user if session else None,
         "csrf_token": session.csrf_token if session else "",
         "flashes": deps.take_flashes(request),
-        "runtime": deps.get_runtime(request),
+        "runtime": runtime,
         "current_path": request.url.path,
+        # Drives the browser-side idle logout, which mirrors the server's own
+        # session timeout rather than inventing a second one.
+        "idle_timeout_seconds": runtime.auth.sessions.idle_timeout_seconds
+        if session
+        else 0,
     }
     payload.update(context or {})
     return request.app.state.templates.TemplateResponse(

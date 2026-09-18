@@ -66,10 +66,22 @@ The script needs Python 3.13+, creates `.venv`, installs the pinned
 requirements and checks that the Snap7 client library loads. To do it by hand:
 
 ```bash
+# Linux / macOS
 python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt   # or requirements-dev.txt
+.venv/bin/pip install -r requirements.txt        # or requirements-dev.txt
 .venv/bin/pip install --no-deps -e .
 ```
+
+```powershell
+# Windows
+py -3.13 -m venv .venv
+.venv\Scripts\pip install -r requirements-windows.txt
+.venv\Scripts\pip install --no-deps -e .
+```
+
+Run them from the project root, with the virtualenv activated if you prefer
+plain `pip`. The last command is what creates the `snap7-gateway` executable;
+`python -m snap7_gateway run ...` does the same job without it.
 
 | File | Contents |
 | --- | --- |

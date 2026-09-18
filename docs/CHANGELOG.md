@@ -37,7 +37,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `pyproject.toml` drift apart, if a version is not pinned exactly, if the
   lock file goes stale, or if pywin32 leaks into a file used on Linux.
 
+### Added
+- A page left idle now signs itself out when the session's idle timeout runs
+  out, instead of sitting open on an unattended screen until somebody clicks.
+  A warning strip with a countdown and a "Stay signed in" button appears near
+  the end of the window. It follows the existing **Idle timeout** setting rather
+  than adding a second one, and the browser asks the server to extend a session
+  only after real interaction - a plain timer ping would hold a session open
+  next to an empty chair. With JavaScript disabled nothing is weakened: the
+  server enforces the same timeout at the next request.
+- `POST /api/keepalive` (CSRF-protected) extends the session and reports the
+  time remaining, so the page can re-sync a countdown that a background tab may
+  have throttled.
+
 ### Fixed
+- Account actions (Save / Disable / Delete) overflowed the right-hand border of
+  the Users & Security panel: the role dropdown took the full 30rem control
+  width inside a `nowrap` cell. Action cells now flow and wrap, table controls
+  size to their content, and the accounts table scrolls inside its panel on a
+  narrow screen.
+- The masthead **Log out** button was accent-blue text on the accent-blue
+  masthead - visible only on hover. It now has its own contrast and a border, so
+  it reads as a control without needing an icon.
+- Controls in a form grid lined up with their labels rather than with each
+  other, so a label wrapping onto two lines ("DB number (data block sources that
+  omit it)") dragged its dropdown out of line. Grid cells are now columns whose
+  control sits on the bottom edge, and file inputs are styled to match.
 - Sign-in could become permanently impossible. The login form's anti-forgery
   check rendered a fresh token into the page without setting the matching
   cookie, so after one failure every later attempt failed too - on a correct
@@ -51,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crashes out of it.
 
 ### Changed
+- The manual and README showed Linux-only paths for installing by hand, which
+  left a Windows operator without a working command. Both now give the
+  `.venv\Scripts\...` form, the activated-virtualenv form, and note that
+  `pip install --no-deps -e .` is what creates the `snap7-gateway` executable,
+  with `python -m snap7_gateway` as the equivalent that needs no install.
+  Troubleshooting covers "'snap7-gateway' is not recognized" and the case where
+  a shell prompt was copied along with a pasted command.
 - The first-run administrator account is now `admin` / `admin`, a documented
   default, instead of a generated password that had to be retrieved from the
   log. CLAUDE.md section 3.2 allows either; the forced password change before
