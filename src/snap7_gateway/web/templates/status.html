@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ t('status.heading') }}{% endblock %}
+{% block content %}
+<h1>{{ t('status.heading') }}</h1>
+
+<section>
+  <table class="kv">
+    <tr><th>{{ t('status.uptime') }}</th><td>{{ duration(status.uptime_seconds) }}</td></tr>
+    <tr><th>Started</th><td>{{ fmt_ts(status.started_at) }}</td></tr>
+    <tr><th>Data directory</th><td>{{ status.data_dir }}</td></tr>
+    <tr><th>Discovered areas</th><td>{{ area_count }}</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>{{ t('nav.connections') }}</h2>
+  {% if status.connections %}
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t('common.name') }}</th><th>{{ t('common.status') }}</th>
+        <th>{{ t('conn.last_success') }}</th><th>Polls</th><th>Errors</th>
+        <th>Areas polled</th><th>Last discovery</th><th>Last error</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for health in status.connections %}
+      <tr>
+        <td>{{ health.name }}</td>
+        <td class="state state-{{ health.state }}">{{ t.state(health.state) }}</td>
+        <td>{{ fmt_ts(health.last_success_at) }}</td>
+        <td>{{ health.total_polls }}</td>
+        <td>{{ health.total_errors }}</td>
+        <td>{{ health.polled_areas }}</td>
+        <td>{{ health.last_discovery_summary or '-' }}</td>
+        <td class="wrap">{{ health.last_error or '-' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{{ t('conn.none') }} <a href="/connections/new">{{ t('action.add') }}</a></p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{{ t('status.vplc') }}</h2>
+  <table class="kv">
+    <tr><th>{{ t('common.status') }}</th>
+        <td>{% if status.virtual_plc.running %}Running{% else %}Stopped{% endif %}</td></tr>
+    <tr><th>Listening on</th>
+        <td>{{ status.virtual_plc.bind_ip }}:{{ status.virtual_plc.port }}
+            (rack {{ status.virtual_plc.rack }}, slot {{ status.virtual_plc.slot }})</td></tr>
+    <tr><th>{{ t('dw.registered') }}</th>
+        <td>{{ status.virtual_plc.registered_areas }}
+            ({{ status.virtual_plc.registered_bytes }} bytes)</td></tr>
+    <tr><th>Connected clients</th>
+        <td>{{ status.virtual_plc.snap7_status.clients if status.virtual_plc.snap7_status else '-' }}</td></tr>
+    <tr><th>Sync</th>
+        <td>{{ status.sync.runs }} run(s), {{ status.sync.updates }} buffer update(s),
+            last {{ fmt_ts(status.sync.last_run_at) }}</td></tr>
+    {% if status.virtual_plc.last_error %}
+    <tr><th>Last error</th><td class="bad">{{ status.virtual_plc.last_error }}</td></tr>
+    {% endif %}
+    {% if status.sync.skipped_stale %}
+    <tr><th>Withheld (no current read)</th>
+        <td class="bad">{{ status.sync.skipped_stale|join(', ') }}</td></tr>
+    {% endif %}
+  </table>
+</section>
+
+<section>
+  <h2>{{ t('status.crash') }}</h2>
+  {% if status.previous_unclean_shutdown %}
+  <p class="flash flash-warn">{{ t('status.unclean') }}</p>
+  {% endif %}
+  {% if status.crash_snapshots %}
+  <p>{{ status.crash_snapshot_count }} snapshot(s) in the crash folder.</p>
+  <table>
+    <thead><tr><th>File</th><th>{{ t('common.time') }}</th><th>Bytes</th><th>{{ t('common.actions') }}</th></tr></thead>
+    <tbody>
+    {% for snap in status.crash_snapshots %}
+      <tr>
+        <td>{{ snap.name }}</td>
+        <td>{{ fmt_ts(snap.modified) }}</td>
+        <td>{{ snap.size }}</td>
+        <td>{% if user.role == 'admin' %}<a href="/crash/{{ snap.name }}">{{ t('action.download') }}</a>{% else %}-{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{{ t('status.no_crash') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

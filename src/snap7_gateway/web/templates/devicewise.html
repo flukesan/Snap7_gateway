@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ t('dw.heading') }}{% endblock %}
+{% block content %}
+<h1>{{ t('dw.heading') }}</h1>
+<p class="hint">{{ t('dw.explain') }}</p>
+
+<section>
+  <h2>{{ t('common.status') }}</h2>
+  <table class="kv">
+    <tr><th>{{ t('common.status') }}</th>
+        <td>{% if vplc.running %}Running on {{ vplc.bind_ip }}:{{ vplc.port }}{% else %}Stopped{% endif %}</td></tr>
+    <tr><th>DeviceWise device settings</th>
+        <td>Driver: Siemens S7 &middot; Connection: Direct &middot;
+            Address: this gateway &middot; Rack {{ vplc.rack }} &middot; Slot {{ vplc.slot }}</td></tr>
+    <tr><th>{{ t('dw.registered') }}</th>
+        <td>{{ vplc.registered_areas }} ({{ vplc.registered_bytes }} bytes)</td></tr>
+    {% if vplc.last_error %}
+    <tr><th>Last error</th><td class="bad">{{ vplc.last_error }}</td></tr>
+    {% endif %}
+  </table>
+
+  {% if vplc.areas %}
+  <table>
+    <thead><tr><th>Connection</th><th>Area</th><th>Index</th><th>{{ t('common.size') }}</th>
+               <th>Updates</th><th>Last update</th></tr></thead>
+    <tbody>
+    {% for area in vplc.areas %}
+      <tr>
+        <td>{{ connections[area.connection_id].name if area.connection_id in connections else area.connection_id }}</td>
+        <td>{{ area.area }}</td>
+        <td>{{ area.index }}</td>
+        <td>{{ area.size }}</td>
+        <td>{{ area.updates }}</td>
+        <td>{{ fmt_ts(area.last_update_at) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No areas are registered yet. An area is registered only once it is exposed
+     <em>and</em> backed by a current, successful read from the PLC.</p>
+  {% endif %}
+</section>
+
+{% if user.role == 'admin' %}
+<section>
+  <h2>{{ t('action.edit') }}</h2>
+  <form method="post" action="/devicewise">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label><input type="checkbox" name="vplc_enabled" value="1"
+      {% if settings.vplc_enabled == 'true' %}checked{% endif %}> Run the virtual S7 CPU</label>
+
+    <div class="grid">
+      <div>
+        <label for="vplc_bind_ip">Bind address</label>
+        <input type="text" id="vplc_bind_ip" name="vplc_bind_ip" value="{{ settings.vplc_bind_ip }}">
+      </div>
+      <div>
+        <label for="vplc_port">TCP port</label>
+        <input type="number" id="vplc_port" name="vplc_port" value="{{ settings.vplc_port }}" min="1" max="65535">
+      </div>
+      <div>
+        <label for="vplc_rack">Rack (reported)</label>
+        <input type="number" id="vplc_rack" name="vplc_rack" value="{{ settings.vplc_rack }}" min="0" max="7">
+      </div>
+      <div>
+        <label for="vplc_slot">Slot (reported)</label>
+        <input type="number" id="vplc_slot" name="vplc_slot" value="{{ settings.vplc_slot }}" min="0" max="31">
+      </div>
+      <div>
+        <label for="vplc_max_clients">Max clients</label>
+        <input type="number" id="vplc_max_clients" name="vplc_max_clients" value="{{ settings.vplc_max_clients }}" min="1" max="1024">
+      </div>
+      <div>
+        <label for="vplc_sync_interval_ms">Buffer sync interval (ms)</label>
+        <input type="number" id="vplc_sync_interval_ms" name="vplc_sync_interval_ms" value="{{ settings.vplc_sync_interval_ms }}" min="50" max="60000">
+      </div>
+      <div>
+        <label for="vplc_stale_timeout_seconds">Stale timeout (s)</label>
+        <input type="number" id="vplc_stale_timeout_seconds" name="vplc_stale_timeout_seconds" value="{{ settings.vplc_stale_timeout_seconds }}" min="1" max="3600">
+      </div>
+    </div>
+    <p class="hint">Port 102 is what DeviceWise expects. Binding it needs root
+       (CAP_NET_BIND_SERVICE in the systemd unit) on Linux or Administrator on Windows.
+       An area whose newest good read is older than the stale timeout is unregistered, so
+       DeviceWise gets a clean failure instead of stale bytes.</p>
+
+    <fieldset>
+      <legend>Discovery</legend>
+      <div class="grid">
+        <div>
+          <label for="discovery_interval_minutes">Automatic rescan interval (minutes, 0 = manual only)</label>
+          <input type="number" id="discovery_interval_minutes" name="discovery_interval_minutes" value="{{ settings.discovery_interval_minutes }}" min="0" max="10080">
+        </div>
+        <div>
+          <label for="discovery_max_db_count">Max DBs to enumerate</label>
+          <input type="number" id="discovery_max_db_count" name="discovery_max_db_count" value="{{ settings.discovery_max_db_count }}" min="1" max="65535">
+        </div>
+      </div>
+    </fieldset>
+
+    <button type="submit">{{ t('action.save') }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

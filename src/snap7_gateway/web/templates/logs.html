@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ t('logs.heading') }}{% endblock %}
+{% block content %}
+<h1>{{ t('logs.heading') }}</h1>
+
+<form method="get" action="/logs" class="inline-form">
+  <label for="level">{{ t('logs.filter') }}</label>
+  <select id="level" name="level">
+    {% for option in levels %}
+    <option value="{{ option }}" {% if level == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <label for="lines">Lines</label>
+  <input type="number" id="lines" name="lines" value="{{ lines }}" min="10" max="2000">
+  <button type="submit">{{ t('action.refresh') }}</button>
+</form>
+
+<p>
+  <a href="/logs/download">{{ t('action.download') }} ({{ log_file }})</a>
+</p>
+
+{% if user.role == 'admin' %}
+<form method="post" action="/logs/level" class="inline-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="log_level">Service log level (currently {{ current_level }})</label>
+  <select id="log_level" name="log_level">
+    {% for option in levels %}
+    <option value="{{ option }}" {% if current_level == option %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">{{ t('action.apply') }}</button>
+</form>
+{% endif %}
+
+{% if entries %}
+<table class="logs">
+  <thead>
+    <tr><th>{{ t('common.time') }}</th><th>{{ t('common.level') }}</th><th>{{ t('common.module') }}</th>
+        <th>Conn</th><th>{{ t('common.message') }}</th></tr>
+  </thead>
+  <tbody>
+  {% for entry in entries %}
+    <tr class="log-{{ entry.level|lower }}">
+      <td class="mono">{{ fmt_ts(entry.created) }}</td>
+      <td>{{ entry.level }}</td>
+      <td class="mono">{{ entry.module }}</td>
+      <td>{{ entry.connection_id }}</td>
+      <td class="wrap">{{ entry.message }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{{ t('logs.empty') }}</p>
+{% endif %}
+{% endblock %}

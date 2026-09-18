@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ t('tags.heading') }}{% endblock %}
+{% block content %}
+<h1>{{ t('tags.heading') }}</h1>
+
+{% if connections %}
+<form method="get" action="/tags" class="inline-form">
+  <label for="connection_id">{{ t('nav.connections') }}</label>
+  <select id="connection_id" name="connection_id" onchange="this.form.submit()">
+    {% for option in connections %}
+    <option value="{{ option.id }}" {% if connection and option.id == connection.id %}selected{% endif %}>
+      {{ option.name }} ({{ option.host }})</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">{{ t('action.apply') }}</button></noscript>
+</form>
+
+{% if user.role == 'admin' %}
+<form method="post" action="/tags/rescan" class="inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="connection_id" value="{{ connection.id }}">
+  <button type="submit">{{ t('action.rescan') }}</button>
+</form>
+{% endif %}
+
+<section>
+  <h2>{{ t('tags.areas') }}</h2>
+  {% if mirror_all %}
+  <p class="hint">This connection is in <strong>{{ t('conn.exposure.mirror_all') }}</strong> mode:
+     every discovered area is registered on the virtual CPU automatically.</p>
+  {% else %}
+  <p class="hint">This connection is in <strong>{{ t('conn.exposure.whitelist') }}</strong> mode:
+     only ticked areas are registered. An unticked area does not exist on the virtual CPU, so
+     DeviceWise cannot enumerate it at all.</p>
+  {% endif %}
+
+  {% if areas %}
+  <table>
+    <thead>
+      <tr>
+        <th>Area</th><th>{{ t('common.size') }}</th><th>{{ t('tags.exposed') }}</th>
+        <th>Registered</th><th>Live data</th><th>{{ t('common.status') }}</th>
+        <th>{{ t('common.actions') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for area in areas %}
+      {% set snapshot = snapshots.get(area.id) %}
+      <tr>
+        <td>{{ area.key }}</td>
+        <td>{{ area.size_bytes }}</td>
+        <td>{{ t('common.yes') if (area.exposed or mirror_all) else t('common.no') }}</td>
+        <td>{{ t('common.yes') if (area.area_type, area.db_number) in registered else t('common.no') }}</td>
+        <td>
+          {% if snapshot and snapshot.ok %}{{ '%.1f'|format(snapshot.age()) }}s old, {{ snapshot.size }} bytes
+          {% elif snapshot %}<span class="bad">{{ snapshot.error }}</span>
+          {% else %}not polled{% endif %}
+        </td>
+        <td class="wrap">
+          {{ t.area_status(area.status) }}
+          {% if area.status_detail %}<br><small>{{ area.status_detail }}</small>{% endif %}
+        </td>
+        <td class="actions">
+          {% if user.role == 'admin' %}
+          {% if not mirror_all %}
+          <form method="post" action="/tags/areas/{{ area.id }}/exposure" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="exposed" value="{{ '0' if area.exposed else '1' }}">
+            <button type="submit" class="link-button">
+              {{ t('action.hide') if area.exposed else t('action.expose') }}</button>
+          </form>
+          {% endif %}
+          {% if area.status in ('shrunk', 'grown') %}
+          <form method="post" action="/tags/areas/{{ area.id }}/confirm-shape" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button">{{ t('action.confirm_shape') }}</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/tags/areas/{{ area.id }}/delete" class="inline"
+                data-confirm="Remove {{ area.key }} from the tag map?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
+          </form>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{{ t('tags.none') }}</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{{ t('tags.named') }}</h2>
+  {% if tag_values %}
+  <table>
+    <thead>
+      <tr><th>{{ t('common.name') }}</th><th>{{ t('common.address') }}</th><th>{{ t('common.type') }}</th>
+          <th>{{ t('common.value') }}</th><th>Note</th><th>{{ t('common.actions') }}</th></tr>
+    </thead>
+    <tbody>
+    {% for row in tag_values %}
+      <tr>
+        <td>{{ row.tag.name }}</td>
+        <td>{{ row.tag.address }}</td>
+        <td>{{ row.tag.data_type }}{% if row.tag.data_type == 'STRING' %}[{{ row.tag.length }}]{% endif %}</td>
+        <td>{{ row.value }}</td>
+        <td class="wrap"><small>{{ row.note }}</small></td>
+        <td class="actions">
+          {% if user.role == 'admin' %}
+          <form method="post" action="/tags/{{ row.tag.id }}/delete" class="inline"
+                data-confirm="Delete tag '{{ row.tag.name }}'?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
+          </form>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No named tags on this connection yet.</p>
+  {% endif %}
+
+  {% if user.role == 'admin' %}
+  <h3>{{ t('action.add') }}</h3>
+  <form method="post" action="/tags/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="connection_id" value="{{ connection.id }}">
+    <div class="grid">
+      <div>
+        <label for="tag_name">{{ t('common.name') }}</label>
+        <input type="text" id="tag_name" name="name" required maxlength="64">
+      </div>
+      <div>
+        <label for="tag_area">Area</label>
+        <select id="tag_area" name="area_type">
+          {% for option in area_types %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="tag_db">DB number</label>
+        <input type="number" id="tag_db" name="db_number" value="1" min="1" max="65535">
+      </div>
+      <div>
+        <label for="tag_byte">Byte offset</label>
+        <input type="number" id="tag_byte" name="byte_offset" value="0" min="0">
+      </div>
+      <div>
+        <label for="tag_bit">Bit (BOOL only)</label>
+        <input type="number" id="tag_bit" name="bit_offset" value="0" min="0" max="7">
+      </div>
+      <div>
+        <label for="tag_type">{{ t('common.type') }}</label>
+        <select id="tag_type" name="data_type">
+          {% for option in data_types %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="tag_length">Length (STRING only)</label>
+        <input type="number" id="tag_length" name="length" value="1" min="1" max="254">
+      </div>
+    </div>
+    <label for="tag_desc">Description ({{ t('common.optional') }})</label>
+    <input type="text" id="tag_desc" name="description" maxlength="255">
+    <button type="submit">{{ t('action.add') }}</button>
+  </form>
+  {% endif %}
+</section>
+{% else %}
+<p>{{ t('conn.none') }} <a href="/connections/new">{{ t('action.add') }}</a></p>
+{% endif %}
+{% endblock %}

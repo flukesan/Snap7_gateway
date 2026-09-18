@@ -1,0 +1,131 @@
+/* Snap7 Industrial Gateway - deliberately plain.
+   No icon fonts, no imagery, no external stylesheets: factory networks are
+   air-gapped and the brief calls for text labels only. System fonts only, so
+   nothing is fetched at runtime. */
+
+:root {
+  --ink: #16191d;
+  --muted: #5b6470;
+  --line: #c9ced6;
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --accent: #1f4e79;
+  --ok: #1d6d35;
+  --warn: #8a5a00;
+  --bad: #a11c1c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Tahoma", "Noto Sans Thai",
+               "Leelawadee UI", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1.2rem;
+  background: var(--accent);
+  color: #fff;
+  flex-wrap: wrap;
+}
+.masthead-title { font-weight: 700; letter-spacing: 0.02em; }
+.masthead-user { font-size: 0.9rem; }
+.masthead-user strong { font-weight: 600; }
+
+.mainnav { background: #23425e; }
+.mainnav ul { list-style: none; display: flex; flex-wrap: wrap; margin: 0; padding: 0; }
+.mainnav a {
+  display: block;
+  padding: 0.55rem 0.9rem;
+  color: #dbe6f1;
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+.mainnav a:hover { background: #2d5075; color: #fff; }
+.mainnav a.active { color: #fff; border-bottom-color: #ffffff; background: #2d5075; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 1.2rem; }
+.narrow { max-width: 460px; margin: 2rem auto; background: var(--panel);
+          padding: 1.4rem; border: 1px solid var(--line); }
+
+h1 { font-size: 1.35rem; margin: 0 0 1rem; }
+h2 { font-size: 1.1rem; margin: 1.6rem 0 0.6rem; }
+h3 { font-size: 1rem; margin: 1.2rem 0 0.5rem; }
+
+section { background: var(--panel); border: 1px solid var(--line); padding: 1rem 1.1rem;
+          margin-bottom: 1.1rem; }
+
+table { width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line);
+         vertical-align: top; }
+thead th { background: #eceff3; font-weight: 600; white-space: nowrap; }
+table.kv th { width: 18rem; background: #f7f8fa; font-weight: 600; }
+tr.subrow td { background: #fafbfc; }
+td.wrap { white-space: normal; word-break: break-word; max-width: 34rem; }
+td.actions { white-space: nowrap; }
+td.value { font-size: 1.1rem; font-weight: 600; }
+.mono, td.mono { font-family: "Consolas", "DejaVu Sans Mono", "Courier New", monospace;
+                 font-size: 0.86rem; }
+
+label { display: block; margin: 0.7rem 0 0.2rem; font-weight: 600; font-size: 0.9rem; }
+label input[type="checkbox"] { margin-right: 0.4rem; font-weight: 400; }
+input[type="text"], input[type="password"], input[type="number"], select {
+  width: 100%; max-width: 30rem; padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); font: inherit;
+}
+input:focus, select:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+fieldset { border: 1px solid var(--line); margin: 1rem 0; padding: 0.8rem 1rem; }
+legend { font-weight: 700; padding: 0 0.4rem; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0 1rem; }
+
+button, .button, .button-secondary {
+  display: inline-block; margin-top: 0.9rem; padding: 0.45rem 1rem;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  font: inherit; cursor: pointer; text-decoration: none;
+}
+button:hover, .button:hover { background: #17405f; }
+.button-secondary { background: #fff; color: var(--accent); }
+.link-button { background: none; border: none; color: var(--accent); padding: 0 0.3rem;
+               margin: 0; cursor: pointer; text-decoration: underline; font: inherit; }
+.link-button.danger { color: var(--bad); }
+.inline { display: inline; }
+.inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin: 0.6rem 0; }
+.inline-form label { margin: 0; }
+.inline-form input, .inline-form select { width: auto; }
+.inline-form button { margin-top: 0; }
+
+.flashes { margin-bottom: 1rem; }
+.flash { padding: 0.55rem 0.8rem; border-left: 4px solid var(--muted); background: #fff;
+         margin: 0 0 0.5rem; }
+.flash-ok { border-left-color: var(--ok); }
+.flash-warn { border-left-color: var(--warn); }
+.flash-error { border-left-color: var(--bad); }
+.field-error { color: var(--bad); font-size: 0.85rem; margin: 0.2rem 0 0; }
+.hint { color: var(--muted); font-size: 0.88rem; }
+.rules { color: var(--muted); font-size: 0.9rem; }
+.bad { color: var(--bad); }
+
+.state { font-weight: 600; white-space: nowrap; }
+.state-connected { color: var(--ok); }
+.state-connecting, .state-reconnecting { color: var(--warn); }
+.state-failed { color: var(--bad); }
+.state-disabled, .state-stopped { color: var(--muted); }
+
+table.logs td { font-size: 0.85rem; }
+tr.log-warning td { background: #fdf7ec; }
+tr.log-error td, tr.log-critical td { background: #fcefef; }
+
+.pager { display: flex; gap: 1rem; align-items: center; }
+.footer { max-width: 1180px; margin: 0 auto; padding: 1rem 1.2rem 2rem;
+          color: var(--muted); font-size: 0.85rem; }

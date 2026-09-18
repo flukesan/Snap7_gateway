@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ t('action.edit') if connection else t('action.add') }} &mdash; {{ t('conn.heading') }}{% endblock %}
+{% block content %}
+<h1>{% if connection %}{{ t('action.edit') }}: {{ connection.name }}{% else %}{{ t('action.add') }}{% endif %}</h1>
+
+<form method="post"
+      action="{% if connection %}/connections/{{ connection.id }}/edit{% else %}/connections/new{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <fieldset>
+    <legend>PLC side</legend>
+
+    <label for="name">{{ t('common.name') }} ({{ t('common.required') }})</label>
+    <input type="text" id="name" name="name" value="{{ values.name }}" required maxlength="64">
+    {% if errors.name %}<p class="field-error">{{ errors.name }}</p>{% endif %}
+
+    <label for="host">{{ t('conn.host') }} ({{ t('common.required') }})</label>
+    <input type="text" id="host" name="host" value="{{ values.host }}" required maxlength="253">
+    {% if errors.host %}<p class="field-error">{{ errors.host }}</p>{% endif %}
+
+    <div class="grid">
+      <div>
+        <label for="rack">{{ t('conn.rack') }}</label>
+        <input type="number" id="rack" name="rack" value="{{ values.rack }}" min="0" max="7">
+        {% if errors.rack %}<p class="field-error">{{ errors.rack }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="slot">{{ t('conn.slot') }}</label>
+        <input type="number" id="slot" name="slot" value="{{ values.slot }}" min="0" max="31">
+        {% if errors.slot %}<p class="field-error">{{ errors.slot }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="tcp_port">{{ t('conn.port') }}</label>
+        <input type="number" id="tcp_port" name="tcp_port" value="{{ values.tcp_port }}" min="1" max="65535">
+        {% if errors.tcp_port %}<p class="field-error">{{ errors.tcp_port }}</p>{% endif %}
+      </div>
+    </div>
+
+    <label for="connection_type">{{ t('conn.type') }}</label>
+    <select id="connection_type" name="connection_type">
+      {% for option in connection_types %}
+      <option value="{{ option }}" {% if values.connection_type == option %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+
+    <div class="grid">
+      <div>
+        <label for="timeout_ms">{{ t('conn.timeout') }}</label>
+        <input type="number" id="timeout_ms" name="timeout_ms" value="{{ values.timeout_ms }}" min="250" max="60000">
+        {% if errors.timeout_ms %}<p class="field-error">{{ errors.timeout_ms }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="poll_interval_ms">{{ t('conn.poll') }}</label>
+        <input type="number" id="poll_interval_ms" name="poll_interval_ms" value="{{ values.poll_interval_ms }}" min="50" max="3600000">
+        {% if errors.poll_interval_ms %}<p class="field-error">{{ errors.poll_interval_ms }}</p>{% endif %}
+      </div>
+    </div>
+
+    <label><input type="checkbox" name="enabled" value="1" {% if values.enabled %}checked{% endif %}>
+      {{ t('common.enabled') }}</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ t('conn.read_areas') }}</legend>
+    <p class="hint">Data blocks are always discovered. Inputs, outputs and merkers have no block
+       info on an S7 CPU, so the gateway probes downward from the sizes below.</p>
+    <label><input type="checkbox" name="read_inputs" value="1" {% if values.read_inputs %}checked{% endif %}> Inputs (I)</label>
+    <label for="max_input_bytes">Max input bytes</label>
+    <input type="number" id="max_input_bytes" name="max_input_bytes" value="{{ values.max_input_bytes }}" min="0">
+    <label><input type="checkbox" name="read_outputs" value="1" {% if values.read_outputs %}checked{% endif %}> Outputs (Q)</label>
+    <label for="max_output_bytes">Max output bytes</label>
+    <input type="number" id="max_output_bytes" name="max_output_bytes" value="{{ values.max_output_bytes }}" min="0">
+    <label><input type="checkbox" name="read_merkers" value="1" {% if values.read_merkers %}checked{% endif %}> Merkers (M)</label>
+    <label for="max_merker_bytes">Max merker bytes</label>
+    <input type="number" id="max_merker_bytes" name="max_merker_bytes" value="{{ values.max_merker_bytes }}" min="0">
+  </fieldset>
+
+  <fieldset>
+    <legend>Output side</legend>
+    <label for="exposure_mode">{{ t('conn.exposure') }}</label>
+    <select id="exposure_mode" name="exposure_mode">
+      {% for option in exposure_modes %}
+      <option value="{{ option }}" {% if values.exposure_mode == option %}selected{% endif %}>
+        {{ t('conn.exposure.' ~ option) }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">Mirror All registers every discovered area on the virtual CPU.
+       Whitelist registers only areas you tick on the Tag Mapping page; anything else is
+       invisible to DeviceWise, not merely hidden.</p>
+
+    <label><input type="checkbox" name="write_enabled" value="1" {% if values.write_enabled %}checked{% endif %}>
+      {{ t('conn.write_enabled') }}</label>
+    <p class="hint">Off by default. A gateway's job is monitoring; enable writes only when this
+       connection genuinely needs to control the PLC.</p>
+  </fieldset>
+
+  <button type="submit">{{ t('action.save') }}</button>
+  <a href="/connections" class="button-secondary">{{ t('action.cancel') }}</a>
+</form>
+{% endblock %}

@@ -1,0 +1,55 @@
+# systemd unit for the Snap7 Industrial Gateway (CLAUDE.md section 4.2).
+#
+# Install with install/linux/install.sh, which also creates the service account
+# and the data directory.
+
+[Unit]
+Description=Snap7 Industrial Gateway (S7 PLC to DeviceWise bridge)
+Documentation=file:/opt/snap7-gateway/docs/MANUAL.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=snap7gw
+Group=snap7gw
+Environment=SNAP7_GATEWAY_DATA_DIR=/var/lib/snap7-gateway
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/snap7-gateway/venv/bin/snap7-gateway run --no-console-log
+WorkingDirectory=/var/lib/snap7-gateway
+
+# 24/7 service: always come back, but back off so a misconfiguration does not
+# become a restart loop that fills the disk with logs.
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# The virtual S7 CPU must bind TCP/102, which is privileged. This grants exactly
+# that one capability instead of running the whole gateway as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Hardening: the gateway only ever writes inside its data directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/snap7-gateway
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Journal still gets stderr; the rotating file log is the primary record.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=snap7-gateway
+
+[Install]
+WantedBy=multi-user.target
