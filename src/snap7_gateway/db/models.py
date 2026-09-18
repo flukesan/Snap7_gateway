@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
 
 class AreaType(StrEnum):
@@ -240,18 +240,34 @@ class PlcTag:
     created_at: float = 0.0
     updated_at: float = 0.0
 
+    #: Width suffix per data type: an INT at byte 20 is ``MW20``, not ``MB20``.
+    _WIDTH_SUFFIX: ClassVar[dict[str, str]] = {
+        "BOOL": "X",
+        "BYTE": "B",
+        "CHAR": "B",
+        "STRING": "B",
+        "WORD": "W",
+        "INT": "W",
+        "UINT": "W",
+        "DWORD": "D",
+        "DINT": "D",
+        "UDINT": "D",
+        "REAL": "D",
+        "LREAL": "D",
+    }
+
     @property
     def address(self) -> str:
-        """Siemens-style address text, e.g. ``DB10.DBX4.2`` or ``MW20``."""
+        """Siemens-style address text, e.g. ``DB10.DBX4.2``, ``MW20``, ``MD24``."""
+        suffix = self._WIDTH_SUFFIX.get(str(self.data_type).upper(), "B")
         if self.area_type == AreaType.DB:
-            base = f"DB{self.db_number}.DBB{self.byte_offset}"
-            if self.data_type == "BOOL":
-                base = f"DB{self.db_number}.DBX{self.byte_offset}.{self.bit_offset}"
-            return base
+            if suffix == "X":
+                return f"DB{self.db_number}.DBX{self.byte_offset}.{self.bit_offset}"
+            return f"DB{self.db_number}.DB{suffix}{self.byte_offset}"
         prefix = {"I": "I", "Q": "Q", "M": "M"}.get(str(self.area_type), "?")
-        if self.data_type == "BOOL":
+        if suffix == "X":
             return f"{prefix}{self.byte_offset}.{self.bit_offset}"
-        return f"{prefix}B{self.byte_offset}"
+        return f"{prefix}{suffix}{self.byte_offset}"
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "PlcTag":
