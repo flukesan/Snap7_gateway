@@ -6,7 +6,8 @@
   <title>{% block title %}{{ t('app.title') }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+<body{% if session %} data-idle-timeout="{{ idle_timeout_seconds }}"
+      data-csrf-token="{{ csrf_token }}"{% endif %}>
 <header class="masthead">
   <div class="masthead-title">{{ t('app.title') }}</div>
   {% if session and not hide_nav %}
@@ -46,6 +47,14 @@
 
   {% block content %}{% endblock %}
 </main>
+
+{% if session %}
+<div class="idle-warning" id="idle-warning" hidden
+     data-template="{{ t('idle.warning') }}">
+  <span><span id="idle-message"></span></span>
+  <button type="button" id="idle-stay">{{ t('idle.stay') }}</button>
+</div>
+{% endif %}
 
 <footer class="footer">
   Snap7 Industrial Gateway &mdash; PLC data bridge to DeviceWise

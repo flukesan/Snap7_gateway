@@ -145,7 +145,9 @@ async def login_submit(
 
 
 @router.post("/logout")
-async def logout(request: Request, csrf_token: str = Form("")) -> Response:
+async def logout(
+    request: Request, csrf_token: str = Form(""), reason: str = Form("")
+) -> Response:
     runtime = deps.get_runtime(request)
     context = deps.get_session(request)
     # A forged logout is only a nuisance, but the check is free and keeps the
@@ -155,7 +157,10 @@ async def logout(request: Request, csrf_token: str = Form("")) -> Response:
         runtime.auth.logout(
             context.token, username=context.user.username, ip=deps.client_ip(request)
         )
-    response: RedirectResponse = deps.redirect("/login")
+    # An idle logout says so on the sign-in page, so the operator knows why the
+    # screen changed rather than assuming the gateway dropped out.
+    target = "/login?timeout=1" if reason == "timeout" else "/login"
+    response: RedirectResponse = deps.redirect(target)
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
     return response
 

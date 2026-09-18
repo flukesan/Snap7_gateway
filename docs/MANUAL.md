@@ -540,6 +540,24 @@ Cookies are `HttpOnly`, `SameSite=Lax` and `Secure` over HTTPS. Only the SHA-256
 of the session token is stored. Sessions end on logout, on password change, when
 the account is disabled or deleted, and at either timeout.
 
+**Automatic sign-out.** A page left idle signs itself out when the idle timeout
+runs out, so a gateway does not sit open on an unattended screen in the control
+room until somebody happens to click something. A warning strip appears near the
+end of the window with a countdown and a **Stay signed in** button; any typing,
+clicking or scrolling also resets it.
+
+Two things are worth knowing about how this behaves:
+
+* It follows the **Idle timeout** setting above - there is no second timer to
+  configure, and changing that setting changes both the server's enforcement and
+  the browser's countdown.
+* The browser only tells the server to extend a session **after real
+  interaction**. A page that pinged on a plain timer would keep a session alive
+  next to an empty chair, which is the opposite of what an idle timeout is for.
+
+If JavaScript is disabled, the automatic sign-out simply does not happen; the
+server still enforces exactly the same timeout at the next request.
+
 ### 7.5 TLS
 
 HTTPS is on by default. On first run — and whenever the stored certificate is
