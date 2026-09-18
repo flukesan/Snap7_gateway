@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crashes out of it.
 
 ### Changed
+- The manual and README showed Linux-only paths for installing by hand, which
+  left a Windows operator without a working command. Both now give the
+  `.venv\Scripts\...` form, the activated-virtualenv form, and note that
+  `pip install --no-deps -e .` is what creates the `snap7-gateway` executable,
+  with `python -m snap7_gateway` as the equivalent that needs no install.
+  Troubleshooting covers "'snap7-gateway' is not recognized" and the case where
+  a shell prompt was copied along with a pasted command.
 - The first-run administrator account is now `admin` / `admin`, a documented
   default, instead of a generated password that had to be retrieved from the
   log. CLAUDE.md section 3.2 allows either; the forced password change before
