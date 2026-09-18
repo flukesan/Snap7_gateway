@@ -105,6 +105,7 @@ class GatewayRuntime:
         self.bootstrap_password = self.auth.ensure_bootstrap_admin()
         if self.bootstrap_password:
             self._announce_bootstrap_credentials(self.bootstrap_password)
+        self._warn_about_initial_passwords()
 
         self.auth.sessions.purge_expired()
         self.start_virtual_plc()
@@ -190,7 +191,7 @@ class GatewayRuntime:
         self.sync.request_refresh()
 
     def _announce_bootstrap_credentials(self, password: str) -> None:
-        """Log the generated admin password exactly once, at first boot only.
+        """Log the first-run admin credentials once, at first boot only.
 
         This is the single place in the codebase permitted to write a
         credential to the log, and it happens once per installation. The account
@@ -198,14 +199,37 @@ class GatewayRuntime:
         """
         banner = "=" * 72
         logger.warning(
-            "\n%s\nFIRST RUN: a default administrator account has been created.\n"
+            "\n%s\nFIRST RUN: an administrator account has been created.\n"
             "  username: admin\n  password: %s\n"
-            "This password is shown ONCE and must be changed at first login "
-            "before any other action is possible.\n%s",
+            "This password must be changed at first sign-in before any other "
+            "action is possible.\n%s",
             banner,
             password,
             banner,
         )
+
+    def _warn_about_initial_passwords(self) -> None:
+        """Warn on every start while an account is still on its initial password.
+
+        The first-run password is a documented default, so until it is changed
+        the gateway is only as protected as a credential anyone can look up.
+        Saying so once at first boot is not enough - a box commissioned on a
+        Friday and left over a weekend needs the reminder at every start.
+        """
+        pending = self.auth.accounts_awaiting_first_change()
+        if not pending:
+            return
+        if self.auth.uses_default_credentials():
+            logger.warning(
+                "SECURITY: the 'admin' account is still using the documented default "
+                "password. Sign in at the web UI and change it now - until then anyone "
+                "who can reach this gateway can take it over."
+            )
+        else:
+            logger.warning(
+                "account(s) %s have not yet changed the password they were created with",
+                ", ".join(sorted(pending)),
+            )
 
     # ------------------------------------------------------------------
     # status

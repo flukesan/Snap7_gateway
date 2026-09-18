@@ -18,6 +18,7 @@ Protections implemented here (CLAUDE.md section 3.2):
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from collections import defaultdict, deque
@@ -34,6 +35,33 @@ from .sessions import SessionManager
 logger = logging.getLogger(__name__)
 
 DEFAULT_ADMIN_USERNAME = "admin"
+
+#: First-run password. CLAUDE.md section 3.2 allows either a random password or
+#: a clearly-labelled default one; a known default is the easier hand-over on a
+#: factory floor, and is safe *only* because no page is reachable until it is
+#: changed (section 4.4). It is deliberately something the password policy will
+#: refuse as a replacement, so it cannot be re-entered as the new password.
+DEFAULT_ADMIN_PASSWORD = "admin"
+
+#: Sites with a stricter policy can override the first-run password before the
+#: very first start, without editing code:
+#:
+#:   SNAP7_GATEWAY_FIRST_RUN_PASSWORD=random   -> generate a strong random one
+#:   SNAP7_GATEWAY_FIRST_RUN_PASSWORD=<text>   -> use exactly that
+#:
+#: It is read once, at the moment the admin account is created, and never
+#: again.
+ENV_FIRST_RUN_PASSWORD = "SNAP7_GATEWAY_FIRST_RUN_PASSWORD"
+
+
+def initial_admin_password() -> tuple[str, bool]:
+    """Return the first-run password and whether it is the well-known default."""
+    override = os.environ.get(ENV_FIRST_RUN_PASSWORD, "").strip()
+    if not override:
+        return DEFAULT_ADMIN_PASSWORD, True
+    if override.lower() == "random":
+        return generate_password(), False
+    return override, False
 
 
 @dataclass(slots=True)
@@ -127,22 +155,52 @@ class AuthService:
     def ensure_bootstrap_admin(self) -> str | None:
         """Create the first-run ``admin`` account if no users exist.
 
-        Returns the generated password exactly once - the caller logs it at
-        first boot and it is never recoverable afterwards. The account is
-        created with ``must_change_password`` set, which the web layer enforces
-        before granting access to any other page.
+        Returns the password the account was created with, once, so the caller
+        can announce it at first boot. By default that is the documented
+        ``admin`` / ``admin`` pair; ``SNAP7_GATEWAY_FIRST_RUN_PASSWORD`` can ask
+        for a random one instead.
+
+        The account always carries ``must_change_password``, which the web layer
+        enforces before granting access to any other page - that forced change
+        is what makes a known default acceptable at all.
         """
         if self.db.count_users() > 0:
             return None
-        password = generate_password()
+        password, is_default = initial_admin_password()
         user = self.db.create_user(
             DEFAULT_ADMIN_USERNAME,
             hash_password(password),
             role=Role.ADMIN,
             must_change_password=True,
         )
-        self.db.audit("system", "user.bootstrap", user.username, "first-run admin created")
+        self.db.audit(
+            "system",
+            "user.bootstrap",
+            user.username,
+            "first-run admin created with the "
+            + ("documented default password" if is_default else "configured password"),
+        )
         return password
+
+    def accounts_awaiting_first_change(self) -> list[str]:
+        """Enabled accounts still on the password they were created with.
+
+        While this list is non-empty the gateway is only as protected as a
+        published credential, so the startup log and the sign-in page both say
+        so until an operator acts.
+        """
+        return [
+            user.username
+            for user in self.db.list_users()
+            if user.enabled and user.must_change_password
+        ]
+
+    def uses_default_credentials(self) -> bool:
+        """Whether ``admin`` is still reachable with the documented default."""
+        user = self.db.get_user(DEFAULT_ADMIN_USERNAME)
+        if user is None or not user.enabled or not user.must_change_password:
+            return False
+        return verify_password(user.password_hash, DEFAULT_ADMIN_PASSWORD)
 
     # ------------------------------------------------------------------
     # login

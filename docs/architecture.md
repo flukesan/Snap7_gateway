@@ -209,7 +209,7 @@ port and TLS paths are the documented exception and say so in the UI.
 | --- | --- |
 | Transport | HTTPS by default; self-signed certificate generated on first run, operator can supply their own |
 | Password storage | Argon2id (64 MiB, t=3, p=4), never plaintext or reversible |
-| First run | Random 20-character admin password logged **once**; no page is reachable until it is changed |
+| First run | `admin` / `admin`, a documented default (CLAUDE.md 3.2 permits a clearly-labelled one); no page is reachable until it is changed, the sign-in page warns while it is live, and the log repeats the warning at every start. `SNAP7_GATEWAY_FIRST_RUN_PASSWORD=random` opts into a generated one |
 | Password strength | Configurable policy, minimum 12 characters (hard floor), blocklist, no reuse of current/previous, must not contain the username; every rejection states its reason |
 | Brute force | Per-account lockout plus a per-source-IP sliding-window rate limit in front of it; uniform timing for unknown usernames |
 | Sessions | 256-bit token, only its SHA-256 stored; HttpOnly, SameSite=Lax, Secure over HTTPS; idle **and** absolute expiry; invalidated on logout, password change, disable and delete |

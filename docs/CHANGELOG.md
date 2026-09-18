@@ -51,8 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crashes out of it.
 
 ### Changed
-- The manual now marks the first-run password in its example output as an
-  example, and explains how to read the real one out of the log on each
+- The first-run administrator account is now `admin` / `admin`, a documented
+  default, instead of a generated password that had to be retrieved from the
+  log. CLAUDE.md section 3.2 allows either; the forced password change before
+  any other page is reachable (section 4.4) is unchanged and is what makes a
+  known default acceptable. Because the credential is published, the sign-in
+  page warns while it is still live and the service log repeats the warning at
+  every start, not only the first. `SNAP7_GATEWAY_FIRST_RUN_PASSWORD` set
+  before the first start selects `random` or an explicit password instead.
+- The manual's first-run section now documents the default pair, states plainly
+  what the published default costs and for how long, covers the environment
+  override, and explains how to read a generated password out of the log on each
   platform; the troubleshooting section covers both sign-in page messages.
 - `PlcTag.address` now renders the width that matches the data type, so an INT
   at byte 20 reads `MW20` rather than `MB20`.

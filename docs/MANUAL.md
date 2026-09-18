@@ -115,57 +115,98 @@ See `docs/build.md` for the Snap7 C library on each platform and architecture.
 
 ## 3. First run
 
-1. The service generates an `admin` account with a **random** 20-character
-   password and writes it to the log **once**. It looks like this:
+### 3.1 Signing in for the first time
 
-   ```
-   ========================================================================
-   FIRST RUN: a default administrator account has been created.
-     username: admin
-     password: 7kQ$mVr2Xp9wTz4nB!Ld      <-- EXAMPLE ONLY, yours is different
-   This password is shown ONCE and must be changed at first login ...
-   ========================================================================
-   ```
+| | |
+| --- | --- |
+| Address | `https://<gateway-host>:8443/` |
+| Username | `admin` |
+| Password | `admin` |
 
-   > **The password above is an example.** Every installation generates its own,
-   > so it cannot be printed in a manual. Read *your* password out of *your*
-   > log:
-   >
-   > ```bash
-   > journalctl -u snap7-gateway | grep -A4 "FIRST RUN"      # Linux
-   > ```
-   > ```powershell
-   > Select-String -Path "$env:ProgramData\Snap7Gateway\logs\gateway.log" `
-   >   -Pattern "password:"                                  # Windows
-   > ```
-   >
-   > Running in the foreground? It is in the console output at startup.
-   > Lost it? See the bottom of this section - you can set a new one from the
-   > console without signing in.
+The certificate is self-signed on first run, so the browser will warn; accept
+it, or install your own certificate (section 7.5).
 
-2. Open `https://<gateway-host>:8443/`. The certificate is self-signed on first
-   run, so the browser will warn; accept it, or install your own certificate
-   (section 7.4).
+**You are sent straight to "Change your password", and no other page is
+reachable until the change succeeds** — not the dashboard, not the PLC
+configuration, nothing. Choose a password that satisfies the policy
+(section 7.2); rejections tell you exactly what is wrong, for example
+*"'siemens' is a well-known word; adding digits or symbols around it does not
+make it safe"*. `admin` itself is refused: it is too short and on the blocked
+list.
 
-3. Sign in. You are sent straight to **Change your password** and **no other
-   page is reachable** until the change succeeds — not the dashboard, not the
-   PLC configuration, nothing.
+All sessions are signed out after the change. Sign in again with the new
+password.
 
-4. Choose a password that satisfies the policy (section 7.2). Rejections tell
-   you exactly what is wrong, for example *"'siemens' is a well-known word;
-   adding digits or symbols around it does not make it safe"*.
+### 3.2 What this default costs you, and for how long
 
-5. All sessions are signed out after the change. Sign in again with the new
-   password.
+`admin` / `admin` is written in this manual, so it is a credential anyone can
+look up. Between the moment the service first starts and the moment you change
+the password, **anyone who can reach this address can sign in and set the
+password themselves**, locking you out of your own gateway.
 
-**Lost the password?** On the gateway host:
+That window is yours to keep short:
+
+* change the password immediately after installing — before wiring the gateway
+  into the plant network if you can;
+* while the default is still live, the sign-in page carries a warning and the
+  service log repeats it at **every** start, not just the first:
+
+  ```
+  SECURITY: the 'admin' account is still using the documented default password.
+  Sign in at the web UI and change it now - until then anyone who can reach
+  this gateway can take it over.
+  ```
+
+If that trade is not acceptable at your site, see the next section.
+
+### 3.3 Using a different first-run password
+
+Set `SNAP7_GATEWAY_FIRST_RUN_PASSWORD` **before the very first start**. It is
+read once, at the moment the admin account is created, and never again.
+
+| Value | Effect |
+| --- | --- |
+| *(unset)* | `admin` — the documented default |
+| `random` | A strong 20-character password, written to the log once at first boot |
+| anything else | That exact text becomes the first-run password |
 
 ```bash
-sudo -u snap7gw /opt/snap7-gateway/venv/bin/snap7-gateway reset-password admin
-sudo -u snap7gw /opt/snap7-gateway/venv/bin/snap7-gateway unlock admin
+# Linux: add to the systemd unit before the first start
+sudo systemctl edit snap7-gateway
+#   [Service]
+#   Environment=SNAP7_GATEWAY_FIRST_RUN_PASSWORD=random
 ```
 
----
+```powershell
+# Windows: set it machine-wide before installing the service
+[Environment]::SetEnvironmentVariable(
+  "SNAP7_GATEWAY_FIRST_RUN_PASSWORD", "random", "Machine")
+```
+
+With `random`, read the generated password out of your own log:
+
+```bash
+journalctl -u snap7-gateway | grep -A4 "FIRST RUN"      # Linux
+```
+```powershell
+Select-String -Path "$env:ProgramData\Snap7Gateway\logs\gateway.log" `
+  -Pattern "password:"                                  # Windows
+```
+
+The forced change applies either way — a random first-run password still has to
+be replaced at first sign-in.
+
+### 3.4 Lost the password
+
+On the gateway host, without signing in:
+
+```bash
+snap7-gateway reset-password admin
+snap7-gateway unlock admin
+```
+
+On Linux run them as the service account, e.g.
+`sudo -u snap7gw /opt/snap7-gateway/venv/bin/snap7-gateway reset-password admin`.
 
 ## 4. PLC Connections
 
@@ -427,7 +468,8 @@ instead of silently frozen data.
 | `admin` | Everything: connections, tag mapping, settings, users |
 | `viewer` | Read-only: System Status, connections list, tag mapping, logs, audit |
 
-New accounts must change their password at first sign-in. The **last enabled
+New accounts must change their password at first sign-in — the same forced
+change the first-run `admin` account goes through. The **last enabled
 administrator cannot be demoted, disabled or deleted**, so the gateway can never
 lock every administrator out. Resetting a user's password signs out all of their
 sessions and forces another change at next sign-in.
@@ -648,11 +690,18 @@ Same cause on the sign-in page, and equally harmless. Elsewhere in the UI it
 means your session ended while a form was open; sign in again and redo the
 action.
 
-**The first-run password from the manual does not work.**
-The password printed in section 3 is an *example*. Yours is generated randomly
-at first boot and appears only in your own log. If it is gone, set a new one on
-the gateway host:
+**`admin` / `admin` is rejected on a gateway that is not new.**
+The default only exists until someone changes it, and it cannot be changed
+back — the policy refuses it. Use the password that was set, or reset it from
+the console:
 
 ```bash
 snap7-gateway reset-password admin
 ```
+
+**`admin` / `admin` is rejected on a gateway that *is* new.**
+Either `SNAP7_GATEWAY_FIRST_RUN_PASSWORD` was set before the first start
+(section 3.3 — check the service environment), or the account was created by an
+earlier run whose password has since been changed. `snap7-gateway show-config`
+prints the data directory in use; a database already there means this is not a
+first run. Reset from the console as above.
