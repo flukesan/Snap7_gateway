@@ -85,6 +85,12 @@ CATALOG: dict[str, dict[str, str]] = {
     "login.heading": {"en": "Gateway sign-in", "th": "เข้าสู่ระบบเกตเวย์"},
     "login.username": {"en": "Username", "th": "ชื่อผู้ใช้"},
     "login.password": {"en": "Password", "th": "รหัสผ่าน"},
+    "login.expired": {
+        "en": "This sign-in page had been open too long. Your details were not sent - "
+              "please enter them again.",
+        "th": "หน้าเข้าสู่ระบบนี้เปิดทิ้งไว้นานเกินไป ระบบยังไม่ได้ส่งข้อมูลของคุณ "
+              "กรุณากรอกใหม่อีกครั้ง",
+    },
     "pwchange.heading": {"en": "Change your password", "th": "เปลี่ยนรหัสผ่านของคุณ"},
     "pwchange.forced": {
         "en": "Your password must be changed before you can use the gateway.",

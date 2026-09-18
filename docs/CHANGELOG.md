@@ -37,7 +37,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `pyproject.toml` drift apart, if a version is not pinned exactly, if the
   lock file goes stale, or if pywin32 leaks into a file used on Linux.
 
+### Fixed
+- Sign-in could become permanently impossible. The login form's anti-forgery
+  check rendered a fresh token into the page without setting the matching
+  cookie, so after one failure every later attempt failed too - on a correct
+  password. Every render of the sign-in page now issues the matching cookie,
+  and the token's lifetime went from 10 minutes to an hour so that fetching the
+  first-run password from the log no longer expires the page.
+- Routine client disconnects (a closed browser tab, an abandoned TLS handshake,
+  DeviceWise dropping a socket) no longer write crash snapshots. On Windows the
+  Proactor event loop reports every one of these through the asyncio exception
+  handler, and because the snapshot folder is capped, that noise pushed genuine
+  crashes out of it.
+
 ### Changed
+- The manual now marks the first-run password in its example output as an
+  example, and explains how to read the real one out of the log on each
+  platform; the troubleshooting section covers both sign-in page messages.
 - `PlcTag.address` now renders the width that matches the data type, so an INT
   at byte 20 reads `MW20` rather than `MB20`.
 - `install/linux/install.sh` and `install/windows/install-service.ps1` now
