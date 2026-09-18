@@ -38,14 +38,19 @@ side — same Siemens driver, same `Connection: Direct`, same rack/slot.
 ```bash
 # Linux
 sudo ./install/linux/install.sh
-journalctl -u snap7-gateway | grep -A4 "FIRST RUN"   # the one-time admin password
 
 # Windows (elevated PowerShell)
 .\install\windows\install-service.ps1
 ```
 
-Then open `https://<gateway-host>:8443/`, sign in as `admin`, and change the
-password — no other page is reachable until you do.
+Then open `https://<gateway-host>:8443/` and sign in with **`admin` / `admin`**.
+You are sent straight to a password change, and no other page is reachable until
+it succeeds.
+
+That default is published, so change it immediately — until you do, anyone who
+can reach the address can take the gateway over. Set
+`SNAP7_GATEWAY_FIRST_RUN_PASSWORD=random` before the first start to get a
+generated password in the log instead (see `docs/MANUAL.md` section 3.3).
 
 For a bench run without installing as a service:
 

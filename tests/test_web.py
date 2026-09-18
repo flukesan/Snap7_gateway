@@ -56,7 +56,7 @@ async def sign_in(client: httpx.AsyncClient, username: str, password: str) -> ht
 async def first_run_login(client: httpx.AsyncClient, runtime: GatewayRuntime) -> None:
     """Complete the first-run flow: sign in, change the password, sign in again."""
     initial = runtime.bootstrap_password
-    assert initial, "the first run must generate an admin password"
+    assert initial, "the first run must create an admin account with a password"
     await sign_in(client, "admin", initial)
     page = await client.get("/password-change")
     await client.post(
@@ -252,6 +252,64 @@ class TestLoginPageRecovery:
                 },
             )
             assert 'value="operator1"' in response.text
+
+        run(scenario, tmp_path)
+
+
+class TestDefaultCredentialsInTheUi:
+    """A fresh install signs in with admin/admin, and says so until it is changed."""
+
+    def test_the_documented_pair_works_and_forces_a_change(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            response = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": "admin",
+                    "csrf_token": csrf_of(page.text),
+                    "next": "/",
+                },
+            )
+            assert response.status_code == 303
+            assert response.headers["location"] == "/password-change"
+            # ...and nothing else is reachable until the change is done.
+            assert (await client.get("/connections")).headers["location"] == "/password-change"
+
+        run(scenario, tmp_path)
+
+    def test_the_sign_in_page_warns_while_the_default_is_live(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            assert "still using its initial password" in page.text
+
+        run(scenario, tmp_path)
+
+    def test_the_warning_disappears_after_the_change(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            await client.post("/logout", data={"csrf_token": csrf_of(
+                (await client.get("/")).text)})
+            page = await client.get("/login")
+            assert "still using its initial password" not in page.text
+
+        run(scenario, tmp_path)
+
+    def test_the_default_cannot_be_kept(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await sign_in(client, "admin", "admin")
+            page = await client.get("/password-change")
+            response = await client.post(
+                "/password-change",
+                data={
+                    "current_password": "admin",
+                    "new_password": "admin",
+                    "confirm_password": "admin",
+                    "csrf_token": csrf_of(page.text),
+                },
+            )
+            assert response.status_code == 400
+            assert runtime.db.get_user("admin").must_change_password is True
 
         run(scenario, tmp_path)
 

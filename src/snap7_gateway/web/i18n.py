@@ -91,6 +91,12 @@ CATALOG: dict[str, dict[str, str]] = {
         "th": "หน้าเข้าสู่ระบบนี้เปิดทิ้งไว้นานเกินไป ระบบยังไม่ได้ส่งข้อมูลของคุณ "
               "กรุณากรอกใหม่อีกครั้ง",
     },
+    "login.default_active": {
+        "en": "This gateway is still using its initial password. Sign in and change it "
+              "now - until you do, anyone who can reach this address can take it over.",
+        "th": "เกตเวย์นี้ยังใช้รหัสผ่านเริ่มต้นอยู่ กรุณาเข้าสู่ระบบและเปลี่ยนรหัสผ่านทันที "
+              "ระหว่างนี้ผู้ที่เข้าถึงแอดเดรสนี้ได้สามารถยึดเครื่องไปได้",
+    },
     "pwchange.heading": {"en": "Change your password", "th": "เปลี่ยนรหัสผ่านของคุณ"},
     "pwchange.forced": {
         "en": "Your password must be changed before you can use the gateway.",

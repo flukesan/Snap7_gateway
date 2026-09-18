@@ -50,6 +50,10 @@ def _render_login(
     locked operators out of a first sign-in.
     """
     csrf = secrets.token_urlsafe(32)
+    # A cheap DB read, not a password verification: this runs on every render of
+    # an unauthenticated page, so it must not be something an attacker can make
+    # expensive by reloading.
+    awaiting_change = bool(deps.get_runtime(request).auth.accounts_awaiting_first_change())
     response = render(
         request,
         "login.html",
@@ -59,6 +63,7 @@ def _render_login(
             "error": error,
             "username": username,
             "hide_nav": True,
+            "default_password_active": awaiting_change,
         },
         status_code=status_code,
     )

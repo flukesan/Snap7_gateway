@@ -9,7 +9,13 @@ import pytest
 from snap7_gateway.auth.blocklist import Blocklist
 from snap7_gateway.auth.hashing import hash_password, verify_password
 from snap7_gateway.auth.policy import ABSOLUTE_MIN_LENGTH, PasswordPolicy, generate_password
-from snap7_gateway.auth.service import RateLimiter
+from snap7_gateway.auth.service import (
+    DEFAULT_ADMIN_PASSWORD,
+    DEFAULT_ADMIN_USERNAME,
+    ENV_FIRST_RUN_PASSWORD,
+    RateLimiter,
+    initial_admin_password,
+)
 from snap7_gateway.db.models import Role
 
 
@@ -129,12 +135,12 @@ class TestRateLimiter:
 class TestLoginFlow:
     def test_bootstrap_creates_one_admin_that_must_change_its_password(self, auth, db) -> None:
         password = auth.ensure_bootstrap_admin()
-        assert password and len(password) >= 20
+        assert password == DEFAULT_ADMIN_PASSWORD
         assert auth.ensure_bootstrap_admin() is None  # only ever once
         user = db.get_user("admin")
         assert user.must_change_password is True
         assert user.role == Role.ADMIN
-        assert password not in user.password_hash
+        assert password not in user.password_hash  # stored hashed, never in the clear
 
     def test_wrong_password_gives_a_generic_error(self, auth) -> None:
         auth.ensure_bootstrap_admin()
@@ -237,3 +243,103 @@ class TestSessions:
         assert not auth.sessions.check_csrf(context, "wrong")
         assert not auth.sessions.check_csrf(context, None)
         assert not auth.sessions.check_csrf(None, context.csrf_token)
+
+
+class TestDefaultCredentials:
+    """admin/admin is usable on a fresh install, and only until it is changed.
+
+    CLAUDE.md section 3.2 allows a clearly-labelled default password as an
+    alternative to a random one; what makes it acceptable is section 4.4's
+    forced change, which these tests pin down.
+    """
+
+    def test_the_documented_pair_signs_in(self, auth) -> None:
+        auth.ensure_bootstrap_admin()
+        result = auth.login(DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1")
+        assert result.ok
+        assert result.must_change_password
+
+    def test_the_default_is_never_stored_in_the_clear(self, auth, db) -> None:
+        auth.ensure_bootstrap_admin()
+        stored = db.get_user("admin").password_hash
+        assert stored.startswith("$argon2id$")
+        assert DEFAULT_ADMIN_PASSWORD not in stored
+
+    def test_the_default_cannot_be_kept_as_the_new_password(self, auth) -> None:
+        """The policy must refuse 'admin' - it is too short and on the blocklist."""
+        auth.ensure_bootstrap_admin()
+        context = auth.sessions.validate(
+            auth.login("admin", DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1").token
+        )
+        result = auth.change_password(
+            context.user, DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD
+        )
+        assert not result.ok
+        assert any("at least 12" in r for r in result.errors)
+
+    def test_a_weak_but_long_variant_is_also_refused(self, auth) -> None:
+        auth.ensure_bootstrap_admin()
+        context = auth.sessions.validate(
+            auth.login("admin", DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1").token
+        )
+        result = auth.change_password(
+            context.user, DEFAULT_ADMIN_PASSWORD, "adminadmin12", "adminadmin12"
+        )
+        assert not result.ok
+
+    def test_changing_it_clears_the_warning_state(self, auth) -> None:
+        auth.ensure_bootstrap_admin()
+        assert auth.uses_default_credentials()
+        assert auth.accounts_awaiting_first_change() == ["admin"]
+
+        context = auth.sessions.validate(
+            auth.login("admin", DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1").token
+        )
+        assert auth.change_password(
+            context.user, DEFAULT_ADMIN_PASSWORD, "Bt7#vRq2Lm9xKp", "Bt7#vRq2Lm9xKp"
+        ).ok
+
+        assert not auth.uses_default_credentials()
+        assert auth.accounts_awaiting_first_change() == []
+
+    def test_the_default_stops_working_once_changed(self, auth) -> None:
+        auth.ensure_bootstrap_admin()
+        context = auth.sessions.validate(
+            auth.login("admin", DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1").token
+        )
+        auth.change_password(
+            context.user, DEFAULT_ADMIN_PASSWORD, "Bt7#vRq2Lm9xKp", "Bt7#vRq2Lm9xKp"
+        )
+        assert not auth.login("admin", DEFAULT_ADMIN_PASSWORD, ip="10.0.0.1").ok
+
+    def test_a_new_operator_account_also_has_to_change_its_password(self, auth, db) -> None:
+        auth.ensure_bootstrap_admin()
+        admin = db.get_user("admin")
+        assert auth.create_user(admin, "line3", "Zr4$kQp8Nv2wLd", Role.VIEWER).ok
+        assert sorted(auth.accounts_awaiting_first_change()) == ["admin", "line3"]
+
+
+class TestFirstRunPasswordOverride:
+    """A site with a stricter policy can opt out of the documented default."""
+
+    def test_no_environment_variable_gives_the_documented_default(self, monkeypatch) -> None:
+        monkeypatch.delenv(ENV_FIRST_RUN_PASSWORD, raising=False)
+        assert initial_admin_password() == (DEFAULT_ADMIN_PASSWORD, True)
+
+    def test_random_generates_a_strong_password(self, monkeypatch) -> None:
+        monkeypatch.setenv(ENV_FIRST_RUN_PASSWORD, "random")
+        password, is_default = initial_admin_password()
+        assert not is_default and len(password) >= 20
+        assert PasswordPolicy(require_symbol=True).validate(password, username="admin") == []
+
+    def test_an_explicit_password_is_used_verbatim(self, monkeypatch) -> None:
+        monkeypatch.setenv(ENV_FIRST_RUN_PASSWORD, "SitePolicy#2026")
+        assert initial_admin_password() == ("SitePolicy#2026", False)
+
+    def test_the_override_reaches_the_created_account(self, auth, monkeypatch) -> None:
+        monkeypatch.setenv(ENV_FIRST_RUN_PASSWORD, "SitePolicy#2026")
+        assert auth.ensure_bootstrap_admin() == "SitePolicy#2026"
+        assert auth.login("admin", "SitePolicy#2026", ip="10.0.0.1").ok
+        assert not auth.uses_default_credentials()
+        # The forced change still applies, whatever the initial password was.
+        assert auth.accounts_awaiting_first_change() == ["admin"]

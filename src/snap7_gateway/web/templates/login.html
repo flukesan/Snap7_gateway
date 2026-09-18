@@ -10,6 +10,9 @@
   {% if error %}
   <p class="flash flash-error">{{ error }}</p>
   {% endif %}
+  {% if default_password_active %}
+  <p class="flash flash-warn">{{ t('login.default_active') }}</p>
+  {% endif %}
 
   <form method="post" action="/login" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ login_csrf }}">
