@@ -594,3 +594,216 @@ class TestOtherPages:
             assert "สถานะระบบ" in response.text
 
         run(scenario, tmp_path)
+
+
+class TestSymbolImport:
+    """Uploading a STEP 7 / TIA export through the Tag Mapping page."""
+
+    SDF = (
+        '"Motor_Start","E      0.0","BOOL","Start pushbutton"\n'
+        '"Speed_SP","MW    20","INT","Speed setpoint"\n'
+        '"Cycle_Timer","T      5","TIMER","Cycle time"\n'
+    )
+
+    async def _connection(self, client, runtime, token):
+        await client.post(
+            "/connections/new",
+            data={
+                "name": "Line3",
+                "host": "10.0.0.5",
+                "rack": "0",
+                "slot": "2",
+                "tcp_port": "102",
+                "connection_type": "PG",
+                "timeout_ms": "3000",
+                "poll_interval_ms": "1000",
+                "exposure_mode": "whitelist",
+                "csrf_token": token,
+            },
+        )
+        return runtime.db.get_connection_by_name("Line3")
+
+    def test_preview_is_the_default_and_writes_nothing(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={"connection_id": str(connection.id), "csrf_token": token},
+                files={"file": ("line3.sdf", self.SDF.encode(), "text/plain")},
+            )
+            assert response.status_code == 200
+            assert "Import preview" in response.text
+            assert "Nothing has been saved" in response.text
+            assert "Motor_Start" in response.text
+            assert runtime.db.list_tags(connection.id) == []
+
+        run(scenario, tmp_path)
+
+    def test_applying_creates_the_tags(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={
+                    "connection_id": str(connection.id),
+                    "apply": "1",
+                    "csrf_token": token,
+                },
+                files={"file": ("line3.sdf", self.SDF.encode(), "text/plain")},
+            )
+            assert response.status_code == 200
+            assert "Symbols imported" in response.text
+            tags = {t.name: t for t in runtime.db.list_tags(connection.id)}
+            assert set(tags) == {"Motor_Start", "Speed_SP"}
+            assert tags["Speed_SP"].address == "MW20"
+            assert tags["Motor_Start"].description == "Start pushbutton"
+
+        run(scenario, tmp_path)
+
+    def test_unusable_rows_are_reported_with_a_reason(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={"connection_id": str(connection.id), "csrf_token": token},
+                files={"file": ("line3.sdf", self.SDF.encode(), "text/plain")},
+            )
+            assert "Cycle_Timer" in response.text
+            assert "timers are not mirrored" in response.text
+
+        run(scenario, tmp_path)
+
+    def test_a_data_block_source_is_imported_with_computed_offsets(self, tmp_path) -> None:
+        source = (
+            'DATA_BLOCK "Recipes"\n'
+            "{ S7_Optimized_Access := 'FALSE' }\n"
+            "   STRUCT\n"
+            "      Recipe_No : Int;   // active recipe\n"
+            "      Running : Bool;   // line running\n"
+            "   END_STRUCT;\n"
+            "BEGIN\n"
+            "END_DATA_BLOCK\n"
+        )
+
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={
+                    "connection_id": str(connection.id),
+                    "kind": "db_source",
+                    "db_number": "12",
+                    "apply": "1",
+                    "csrf_token": token,
+                },
+                files={"file": ("recipes.db", source.encode(), "text/plain")},
+            )
+            assert response.status_code == 200
+            tags = {t.name: t for t in runtime.db.list_tags(connection.id)}
+            assert tags["Recipe_No"].address == "DB12.DBW0"
+            assert tags["Running"].address == "DB12.DBX2.0"
+            assert tags["Recipe_No"].description == "active recipe"
+
+        run(scenario, tmp_path)
+
+    def test_an_optimized_block_is_refused_with_advice(self, tmp_path) -> None:
+        source = (
+            'DATA_BLOCK "Recipes"\n'
+            "{ S7_Optimized_Access := 'TRUE' }\n"
+            "   STRUCT\n      Recipe_No : Int;\n   END_STRUCT;\nBEGIN\nEND_DATA_BLOCK\n"
+        )
+
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={
+                    "connection_id": str(connection.id),
+                    "kind": "db_source",
+                    "apply": "1",
+                    "csrf_token": token,
+                },
+                files={"file": ("recipes.db", source.encode(), "text/plain")},
+            )
+            assert response.status_code == 303
+            page = await client.get(f"/tags?connection_id={connection.id}")
+            assert "optimized block access" in page.text
+            assert runtime.db.list_tags(connection.id) == []
+
+        run(scenario, tmp_path)
+
+    def test_a_junk_upload_is_reported_not_a_500(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/connections/new")).text)
+            connection = await self._connection(client, runtime, token)
+
+            response = await client.post(
+                "/tags/import",
+                data={"connection_id": str(connection.id), "csrf_token": token},
+                files={"file": ("junk.sdf", b"\x00\x01 not a symbol table", "text/plain")},
+            )
+            assert response.status_code in (200, 303)
+            assert runtime.db.list_tags(connection.id) == []
+
+        run(scenario, tmp_path)
+
+    def test_import_requires_admin(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await first_run_login(client, runtime)
+            token = csrf_of((await client.get("/security")).text)
+            await client.post(
+                "/users/new",
+                data={
+                    "username": "viewer2",
+                    "password": "Zr4$kQp8Nv2wLd",
+                    "role": Role.VIEWER.value,
+                    "csrf_token": token,
+                },
+            )
+            connection = await self._connection(
+                client, runtime, csrf_of((await client.get("/connections/new")).text)
+            )
+
+            viewer = httpx.AsyncClient(transport=client._transport, base_url="http://gw")
+            try:
+                await sign_in(viewer, "viewer2", "Zr4$kQp8Nv2wLd")
+                page = await viewer.get("/password-change")
+                await viewer.post(
+                    "/password-change",
+                    data={
+                        "current_password": "Zr4$kQp8Nv2wLd",
+                        "new_password": "Hx9!mTz3Qb6vRn",
+                        "confirm_password": "Hx9!mTz3Qb6vRn",
+                        "csrf_token": csrf_of(page.text),
+                    },
+                )
+                await sign_in(viewer, "viewer2", "Hx9!mTz3Qb6vRn")
+                viewer_token = csrf_of((await viewer.get("/tags")).text)
+                response = await viewer.post(
+                    "/tags/import",
+                    data={"connection_id": str(connection.id), "apply": "1",
+                          "csrf_token": viewer_token},
+                    files={"file": ("line3.sdf", self.SDF.encode(), "text/plain")},
+                )
+                assert response.status_code == 303
+                assert runtime.db.list_tags(connection.id) == []
+            finally:
+                await viewer.aclose()
+
+        run(scenario, tmp_path)

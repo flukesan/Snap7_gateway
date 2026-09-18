@@ -26,6 +26,9 @@ side — same Siemens driver, same `Connection: Direct`, same rack/slot.
 - Plain, icon-free web UI over HTTPS with forced first-login password change,
   Argon2id hashing, account lockout, CSRF protection and a full audit trail.
 - Built-in Test Connection and Test Read tools for commissioning.
+- Import tag names and comments from STEP 7 or TIA Portal exports (`.sdf`,
+  `.asc`, `.xlsx`, `.csv`, `.db`/`.scl`/`.xml`), so an address stops being a
+  bare number. Data-block offsets are computed from the declaration.
 - Structured rotating logs plus crash snapshots for post-mortem debugging.
 - Runs as a Windows service or a Linux systemd service from one codebase.
 - English / Thai web UI.

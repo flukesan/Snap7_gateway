@@ -126,6 +126,46 @@
   {% endif %}
 
   {% if user.role == 'admin' %}
+  <h3>Import names and comments</h3>
+  <p class="hint">A Snap7 read returns bytes only &mdash; a classic S7 CPU does not store its
+     symbol table &mdash; so names and comments have to come from an export made in
+     STEP 7 or TIA Portal. Accepted: STEP 7 symbol tables (<code>.sdf</code>,
+     <code>.asc</code>), TIA PLC tag tables (<code>.xlsx</code>, <code>.csv</code>) and
+     data-block sources (<code>.db</code>, <code>.scl</code>, <code>.awl</code>,
+     <code>.xml</code>). Data blocks must use <strong>standard</strong>, not optimized,
+     block access &mdash; optimized blocks have no fixed byte offsets to import.</p>
+  <form method="post" action="/tags/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="connection_id" value="{{ connection.id }}">
+    <div class="grid">
+      <div>
+        <label for="import_file">Export file</label>
+        <input type="file" id="import_file" name="file" required
+               accept=".sdf,.asc,.csv,.txt,.tsv,.seq,.dif,.xlsx,.xlsm,.db,.scl,.awl,.udt,.xml">
+      </div>
+      <div>
+        <label for="import_kind">Read as</label>
+        <select id="import_kind" name="kind">
+          <option value="auto">Detect from the file</option>
+          <option value="symbols">Symbol / tag table</option>
+          <option value="db_source">Data block declaration</option>
+        </select>
+      </div>
+      <div>
+        <label for="import_db">DB number (data block sources that omit it)</label>
+        <input type="number" id="import_db" name="db_number" min="1" max="65535" placeholder="from the file">
+      </div>
+      <div>
+        <label for="import_prefix">Name prefix ({{ t('common.optional') }})</label>
+        <input type="text" id="import_prefix" name="prefix" maxlength="32" placeholder="e.g. Line3_">
+      </div>
+    </div>
+    <label><input type="checkbox" name="overwrite" value="1"> Update existing tags with the same name</label>
+    <label><input type="checkbox" name="apply" value="1"> Apply &mdash; leave unticked to preview without saving</label>
+    <p class="hint">At most {{ max_import_tags }} tags per import.</p>
+    <button type="submit">Import</button>
+  </form>
+
   <h3>{{ t('action.add') }}</h3>
   <form method="post" action="/tags/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

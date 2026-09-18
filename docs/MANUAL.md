@@ -256,7 +256,100 @@ is gone for good.
 
 Every difference is written to the audit trail.
 
-### 5.4 Named tags
+### 5.4 Importing names and comments from the PLC project
+
+**Snap7 cannot read a symbol table off a PLC.** The S7 protocol returns bytes
+and block sizes; a classic S7-300/400 CPU does not store symbolic names or
+comments at all - they live in the STEP 7 or TIA Portal project. So to know
+that `MW20` is *Speed setpoint in rpm*, export that information from the
+engineering tool and import it here. The gateway then joins the two by address.
+
+Go to *Tag Mapping* → **Import names and comments**.
+
+#### What to export, and from where
+
+| Source | How to export | Covers |
+| --- | --- | --- |
+| STEP 7 classic (SIMATIC Manager) | Symbol table → Table → Export → `.sdf` (recommended) or `.asc` | I, Q, M and absolute DB addresses, with comments |
+| TIA Portal | PLC tags → tag table → Export to file → `.xlsx` (or `.csv`) | I, Q, M with comments |
+| TIA Portal / STEP 7 | Right-click a data block → Generate source from blocks → `.db` / `.scl` / `.awl`, or an Openness `.xml` | The whole structure of one DB, with member comments |
+
+German projects are handled: `E` (Eingang) reads as `I` and `A` (Ausgang) as
+`Q`. Both `%MW20` (TIA) and `MW    20` (STEP 7 column padding) are understood.
+
+#### Data blocks must use standard, not optimized, access
+
+A symbol table gives absolute addresses, so no arithmetic is needed. A data
+block *declaration* does not - the gateway computes each member's byte offset
+from the declaration order using the S7 layout rules (BOOL packs eight to a
+byte, words align to even bytes, `STRING[n]` takes n+2 bytes, structures are
+word-aligned and padded).
+
+Those rules only exist for **standard block access**. A block with *Optimized
+block access* ticked has no fixed offsets at all, and Snap7 cannot address it.
+The import refuses such a file and says so. To fix it in TIA Portal: block
+properties → Attributes → clear **Optimized block access** → compile → download
+→ export again.
+
+#### The import form
+
+| Field | Meaning |
+| --- | --- |
+| Export file | The file from the table above |
+| Read as | Leave on *Detect from the file*; override if the extension is misleading |
+| DB number | Only for a data-block source that does not state its own number |
+| Name prefix | Prepended to every imported name, e.g. `Line3_`, so two blocks with a `Speed` member do not collide |
+| Update existing tags with the same name | Off by default: an existing tag is left alone and reported |
+| Apply | **Off by default.** Leave it unticked to see exactly what would happen; tick it and upload again to write |
+
+Previewing changes nothing, and the preview report is identical to what
+applying does.
+
+#### Reading the report
+
+* **New tags** - created.
+* **Updated tags** - an existing tag of the same name was replaced (only with
+  *Update existing tags* ticked, and only when something actually differs).
+* **Left alone** - already present. Nothing is overwritten silently.
+* **Rejected** - failed the same validation the manual tag form applies.
+* **Not usable from this file** - rows the gateway will not map. Timers (`T5`),
+  counters (`C5`/`Z5`), block names (`DB10`, `FC1`) and structures/arrays are
+  expected here; anything else is worth reading.
+
+Names are adjusted where they have to be: a character the tag table does not
+allow becomes `_` (so `Valve/Open` imports as `Valve_Open`), names longer than
+64 characters are truncated, and a collision gets a `_2` suffix. Every
+adjustment is shown in the report.
+
+Types the gateway cannot decode faithfully are imported as a raw view with an
+honest note in the comment - `TIME` becomes `DINT` with *"IEC TIME raw,
+milliseconds"* appended - and types with no scalar reading at all (`DATE_AND_TIME`,
+`DTL`, `WSTRING`) are skipped with their reason.
+
+#### From the command line
+
+Useful for bulk commissioning, and it works without signing in:
+
+```bash
+snap7-gateway import-symbols --connection "Line 3" line3.sdf              # preview
+snap7-gateway import-symbols --connection "Line 3" line3.sdf --apply      # write
+snap7-gateway import-symbols --connection "Line 3" recipes.db \
+    --kind db_source --db-number 12 --prefix Recipes_ --apply
+```
+
+Add `--overwrite` to replace existing tags of the same name.
+
+#### What the import does *not* do
+
+Imported names and comments are for the operator, on this gateway. They are not
+sent to DeviceWise: the virtual S7 CPU publishes whole memory areas, so
+DeviceWise still enumerates `DB1 UINT1[20304]` and names its own tags on its
+side. Importing also does not change which areas are polled or exposed - but a
+named tag does cause its area to be polled, so its live value can be shown.
+
+Every import is recorded in the audit trail.
+
+### 5.5 Named tags
 
 Below the area table you can name individual addresses:
 
@@ -480,6 +573,8 @@ snap7-gateway uninstall-service                             # Windows
 snap7-gateway reset-password USERNAME
 snap7-gateway unlock USERNAME
 snap7-gateway show-config
+snap7-gateway import-symbols --connection NAME FILE [--apply] [--overwrite]
+                            [--kind auto|symbols|db_source] [--db-number N] [--prefix P]
 ```
 
 `--trust-proxy-headers` makes the gateway honour `X-Forwarded-For`. Only use it

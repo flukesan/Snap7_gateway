@@ -62,8 +62,8 @@ actions.
 | `snap7_gateway/paths.py` | Resolves the single data directory (DB, logs, crash, certs) |
 | `snap7_gateway/logging_/` | Structured rotating logs, in-memory tail, crash snapshots |
 | `snap7_gateway/db/` | SQLite schema, typed rows, accessors, audit trail |
-| `snap7_gateway/plc/` | **Client role**: `client.py` (I/O), `discovery.py` (block map + diff), `decoding.py` (data types) |
-| `snap7_gateway/core/` | `worker.py` (one supervised loop per PLC), `manager.py` (hot reload), `datastore.py` (latest values), `validation.py`, `runtime.py` (composition root) |
+| `snap7_gateway/plc/` | **Client role**: `client.py` (I/O), `discovery.py` (block map + diff), `decoding.py` (data types), `addressing.py` + `s7types.py` + `symbols.py` + `db_layout.py` (reading engineering exports) |
+| `snap7_gateway/core/` | `worker.py` (one supervised loop per PLC), `manager.py` (hot reload), `datastore.py` (latest values), `validation.py`, `tag_import.py` (applying an export to the tag table), `runtime.py` (composition root) |
 | `snap7_gateway/virtual_plc/` | **Server role**: `server.py` (registerArea management), `sync.py` (buffer refresh) |
 | `snap7_gateway/auth/` | Argon2id hashing, password policy, blocklist, sessions, lockout |
 | `snap7_gateway/web/` | FastAPI app, routes, Jinja2 templates, TLS, i18n |
@@ -164,14 +164,37 @@ every update if a future build copies it instead. Writes are bracketed with
 `lock_area`/`unlock_area`, the same lock the server's read path takes, so a
 DeviceWise read can never observe a half-updated payload.
 
-### 6.5 Which areas are polled
+### 6.5 Symbols come from a file, never from the wire
+
+Nothing in the S7 protocol carries symbolic names or comments for a classic
+CPU - they are project data, held by STEP 7 or TIA Portal, not by the PLC. So
+`ListBlocks` and `GetAgBlockInfo` can say *DB1 is 20304 bytes* but never *byte
+4 is the spindle speed setpoint*.
+
+Meaning is therefore imported, not discovered. `symbols.py` reads symbol and
+tag tables (STEP 7 `.sdf`/`.asc`, TIA `.xlsx`/`.csv`), `db_layout.py` reads data
+block declarations and computes each member's offset from the S7 layout rules,
+and `tag_import.py` applies the result to the tag table through the same
+validation the web form uses.
+
+Two consequences worth stating plainly:
+
+* **Offsets are only computable for standard block access.** An optimized
+  S7-1200/1500 block has no fixed layout, so the import refuses it and explains
+  how to change the block, rather than emitting numbers that would read the
+  wrong bytes.
+* **Symbols stay on the gateway.** The virtual CPU publishes memory areas, not
+  named tags, so DeviceWise still enumerates `DB1 UINT1[20304]` and keeps its
+  own naming. The import changes what an operator sees here, not what is served.
+
+### 6.6 Which areas are polled
 
 An area is polled when it is exposed to DeviceWise (its buffer must stay
 current) or when a named tag points into it (an operator is watching it). Areas
 that are neither are skipped, so the gateway does not spend PLC bandwidth on
 data nobody consumes. They can still be read ad hoc with the Test Read tool.
 
-### 6.6 Hot reload
+### 6.7 Hot reload
 
 Saving a connection calls `ConnectionManager.apply_config()`, which reconciles
 running workers against the database. Only connections whose *transport* fields

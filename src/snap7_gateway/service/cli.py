@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from .. import __version__
 
@@ -64,6 +65,40 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(unlock)
     unlock.add_argument("username", help="Account to unlock")
 
+    imp = subparsers.add_parser(
+        "import-symbols",
+        help="Import tag names and comments from a STEP 7 / TIA export",
+        description=(
+            "Snap7 cannot read a symbol table off a PLC - a classic S7 CPU does not store "
+            "one - so names and comments come from an export made in the engineering tool. "
+            "Accepts STEP 7 symbol tables (.sdf, .asc), TIA PLC tag tables (.xlsx, .csv) "
+            "and data-block sources (.db, .scl, .awl, .xml). Previews by default; pass "
+            "--apply to write."
+        ),
+    )
+    _add_common(imp)
+    imp.add_argument("file", help="Export file to read")
+    imp.add_argument(
+        "--connection", required=True, help="Name of the PLC connection to attach the tags to"
+    )
+    imp.add_argument(
+        "--kind",
+        choices=("auto", "symbols", "db_source"),
+        default="auto",
+        help="How to read the file (default: detect from the extension)",
+    )
+    imp.add_argument(
+        "--db-number", type=int, default=None,
+        help="DB number for a data-block source that does not state one",
+    )
+    imp.add_argument("--prefix", default="", help="Prepend this to every imported tag name")
+    imp.add_argument(
+        "--overwrite", action="store_true", help="Replace existing tags with the same name"
+    )
+    imp.add_argument(
+        "--apply", action="store_true", help="Write the changes (without this, only preview)"
+    )
+
     show = subparsers.add_parser("show-config", help="Print the resolved paths and settings")
     _add_common(show)
 
@@ -111,6 +146,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             return 2
         uninstall()
         return 0
+
+    if args.command == "import-symbols":
+        return _import_symbols(args)
 
     if args.command in {"reset-password", "unlock", "show-config"}:
         return _offline_command(args)
@@ -178,6 +216,87 @@ def _offline_command(args: argparse.Namespace) -> int:
             f"Password updated for '{user.username}'. All sessions were signed out and the "
             "password must be changed again at next sign-in."
         )
+        return 0
+    finally:
+        db.close()
+
+
+def _import_symbols(args: argparse.Namespace) -> int:
+    """Import an engineering export into a connection's tag table."""
+    from ..core.tag_import import MAX_IMPORT_TAGS, apply_import, plan_import
+    from ..db.store import Database
+    from ..paths import DataPaths
+    from ..plc.db_layout import DbSourceError, layout_to_symbols, parse_db_export
+    from ..plc.symbols import SymbolImportError, parse_symbol_export
+
+    source = Path(args.file)
+    if not source.is_file():
+        print(f"No such file: {source}", file=sys.stderr)
+        return 1
+    data = source.read_bytes()
+
+    paths = DataPaths.resolve(args.data_dir).ensure()
+    db = Database(paths.db_file)
+    try:
+        connection = db.get_connection_by_name(args.connection)
+        if connection is None:
+            names = ", ".join(c.name for c in db.list_connections()) or "(none configured)"
+            print(f"No connection named '{args.connection}'. Known: {names}", file=sys.stderr)
+            return 1
+
+        kind = args.kind
+        suffix = source.suffix.lstrip(".").lower()
+        if kind == "auto":
+            kind = "db_source" if suffix in {"db", "scl", "awl", "udt", "xml"} else "symbols"
+
+        try:
+            if kind == "db_source":
+                layout = parse_db_export(source.name, data)
+                symbols = layout_to_symbols(
+                    layout, db_number=args.db_number, prefix=args.prefix
+                )
+            else:
+                symbols = parse_symbol_export(source.name, data)
+                if args.prefix:
+                    for entry in symbols.entries:
+                        entry.name = f"{args.prefix}{entry.name}"[:64]
+        except (SymbolImportError, DbSourceError) as exc:
+            print(f"{source.name}: {exc}", file=sys.stderr)
+            return 1
+
+        plan = plan_import(db, connection.id, symbols, overwrite=args.overwrite)
+
+        print(f"{source.name} -> {connection.name}  ({plan.source_format})")
+        for error in plan.errors:
+            print(f"  note: {error}")
+        for label, action in (("new", "create"), ("update", "update"),
+                              ("skip", "skip"), ("reject", "reject")):
+            for item in plan.of_action(action):
+                reason = f"   {item.reason}" if item.reason else ""
+                print(
+                    f"  {label:7} {item.entry.name:32} {item.entry.address_text:18} "
+                    f"{item.entry.data_type}{reason}"
+                )
+        for name, address, reason in plan.file_skipped:
+            print(f"  unusable {name:31} {address:18} {reason}")
+
+        if not args.apply:
+            print(f"\n{plan.summary()}")
+            print("Nothing was written. Re-run with --apply to import.")
+            return 0
+
+        if plan.writes > MAX_IMPORT_TAGS:
+            print(
+                f"\nRefusing to import {plan.writes} tags; the limit is {MAX_IMPORT_TAGS}.",
+                file=sys.stderr,
+            )
+            return 1
+        if not plan.writes:
+            print("\nNothing to import.")
+            return 0
+
+        apply_import(db, connection, plan, actor="console")
+        print(f"\n{plan.summary()}")
         return 0
     finally:
         db.close()

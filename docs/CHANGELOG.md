@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Import of tag names and comments from engineering exports, because Snap7
+  cannot read a symbol table off a PLC - a classic S7 CPU does not store one.
+  Reads STEP 7 classic symbol tables (`.sdf`, `.asc`, including German `E`/`A`
+  mnemonics and fixed-width columns), TIA Portal PLC tag tables (`.xlsx` and
+  `.csv`, parsed with the standard library so no spreadsheet dependency is
+  added), and data-block sources (`.db`, `.scl`, `.awl`, TIA `.xml`).
+- Data-block member offsets computed from the declaration using the S7
+  standard-access layout rules: BOOL packing, word alignment, `STRING[n]` as
+  n+2 bytes, and word-aligned padded structures and arrays. A block using
+  optimized access is refused with the steps to change it, rather than
+  producing offsets that would read the wrong bytes.
+- Import preview by default: the Tag Mapping page and the CLI both report every
+  created, updated, skipped, rejected and unusable row with its reason, and
+  write nothing until the operator asks. Existing tags are never overwritten
+  without `--overwrite` / "Update existing tags".
+- `snap7-gateway import-symbols` for bulk commissioning from the console.
 - `requirements.txt`, `requirements-dev.txt` and `requirements-windows.txt`
   with exact version pins, so a gateway installed today and one installed next
   year run identical code. `pyproject.toml` keeps the compatible-range
@@ -22,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lock file goes stale, or if pywin32 leaks into a file used on Linux.
 
 ### Changed
+- `PlcTag.address` now renders the width that matches the data type, so an INT
+  at byte 20 reads `MW20` rather than `MB20`.
 - `install/linux/install.sh` and `install/windows/install-service.ps1` now
   install the pinned requirements first and then the gateway with `--no-deps`,
   so pip cannot silently re-resolve past the pins. `LOCKED=1` on the Linux

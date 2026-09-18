@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Import symbols &mdash; {{ connection.name }}{% endblock %}
+{% block content %}
+<h1>{% if applied %}Symbols imported{% else %}Import preview{% endif %}</h1>
+
+<p class="hint">
+  {{ filename }} &rarr; {{ connection.name }} &middot; read as {{ plan.source_format }}
+  {% if not applied %}<br><strong>Nothing has been saved.</strong>
+    Tick &ldquo;Apply&rdquo; on the import form and upload the file again to write these changes.{% endif %}
+</p>
+
+<p class="flash {% if plan.rejects or plan.errors %}flash-warn{% elif applied %}flash-ok{% endif %}">
+  {{ plan.summary() }}
+</p>
+
+{% if plan.errors %}
+<section>
+  <h2>File-level notes</h2>
+  <ul>{% for error in plan.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% for action, heading, note in [
+     ('create', 'New tags', 'Imported as new entries in the tag table.'),
+     ('update', 'Updated tags', 'An existing tag with this name was replaced.'),
+     ('skip', 'Left alone', 'Already present. Tick "Update existing tags" to replace them.'),
+     ('reject', 'Rejected', 'These rows did not pass validation and were not imported.')] %}
+  {% set rows = plan.of_action(action) %}
+  {% if rows %}
+  <section>
+    <h2>{{ heading }} ({{ rows|length }})</h2>
+    <p class="hint">{{ note }}</p>
+    <table>
+      <thead>
+        <tr><th>{{ t('common.name') }}</th><th>{{ t('common.address') }}</th>
+            <th>{{ t('common.type') }}</th><th>Comment</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.entry.name }}</td>
+          <td class="mono">{{ row.entry.address_text }}</td>
+          <td>{{ row.entry.data_type }}{% if row.entry.data_type == 'STRING' %}[{{ row.entry.length }}]{% endif %}</td>
+          <td class="wrap">{{ row.entry.comment }}</td>
+          <td class="wrap"><small>
+            {%- if row.entry.renamed %}renamed from &ldquo;{{ row.entry.original_name }}&rdquo;{% if row.entry.note or row.reason %}; {% endif %}{% endif -%}
+            {%- if row.entry.note %}{{ row.entry.note }}{% if row.reason %}; {% endif %}{% endif -%}
+            {{ row.reason }}</small></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+{% endfor %}
+
+{% if plan.file_skipped %}
+<section>
+  <h2>Not usable from this file ({{ plan.file_skipped|length }})</h2>
+  <p class="hint">Rows the gateway cannot map to an address it mirrors. Timers, counters
+     and block names are expected here; anything else is worth a look.</p>
+  <table>
+    <thead><tr><th>{{ t('common.name') }}</th><th>{{ t('common.address') }}</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for name, address, reason in plan.file_skipped %}
+      <tr><td>{{ name }}</td><td class="mono">{{ address }}</td><td class="wrap">{{ reason }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<p><a href="/tags?connection_id={{ connection.id }}" class="button">Back to {{ t('tags.heading') }}</a></p>
+{% endblock %}
