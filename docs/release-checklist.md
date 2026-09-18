@@ -9,6 +9,8 @@ pass/fail) alongside the release.
 ## 0. Automated suite (any platform)
 
 ```bash
+./scripts/setup-venv.sh --dev     # or .\scripts\setup-venv.ps1 -Dev
+source .venv/bin/activate
 pytest tests/ -q
 ```
 
@@ -16,6 +18,15 @@ Expected: all tests pass. This covers both directions of the bridge against a
 Snap7 server simulator, but it does **not** cover service supervision, real
 hardware, or privileged port binding — that is what the rest of this list is
 for.
+
+Also confirm a clean install from the pinned set reproduces exactly:
+
+```bash
+python3.13 -m venv /tmp/verify && /tmp/verify/bin/pip install -r requirements.lock.txt
+diff <(/tmp/verify/bin/pip freeze) <(grep -v '^#' requirements.lock.txt | grep -v '^$')
+```
+
+Expected: no differences.
 
 ## 1. Linux (systemd)
 

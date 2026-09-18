@@ -34,7 +34,13 @@ Write-Host "==> Installing into $Prefix"
 New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
 python -m venv "$Prefix\venv"
 & "$Prefix\venv\Scripts\pip.exe" install --upgrade pip | Out-Null
-& "$Prefix\venv\Scripts\pip.exe" install "$SourceDir[windows]"
+
+# Install the pinned dependency set first (requirements-windows.txt adds
+# pywin32), then the gateway itself with --no-deps: the requirements file has
+# already decided every version, and letting pip re-resolve here would silently
+# defeat those pins.
+& "$Prefix\venv\Scripts\pip.exe" install -r (Join-Path $SourceDir "requirements-windows.txt")
+& "$Prefix\venv\Scripts\pip.exe" install --no-deps "$SourceDir"
 
 Write-Host "==> Bundling snap7.dll"
 # python-snap7 ships the x64 DLL; copy any local override next to the venv so the

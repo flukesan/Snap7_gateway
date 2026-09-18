@@ -149,14 +149,33 @@ grants it) or Administrator/LocalSystem on Windows.
 
 ## 9. Reproducible deployment
 
-The Python side is pinned through `pyproject.toml`. For an air-gapped site,
-build a wheelhouse on a machine with network access:
+The Python side is pinned exactly in `requirements.lock.txt`, which lists every
+package including transitive ones. For an air-gapped site, build a wheelhouse on
+a machine with network access:
 
 ```bash
-pip download -d wheelhouse "snap7-gateway[windows]"   # or without the extra on Linux
-# copy wheelhouse/ to the target
-pip install --no-index --find-links wheelhouse snap7-gateway
+# Linux target
+pip download -d wheelhouse -r requirements.lock.txt
+
+# Windows target (adds pywin32, which has no Linux wheel - download this on
+# a Windows host, or pass --platform/--only-binary to pip)
+pip download -d wheelhouse -r requirements-windows.txt
+
+# copy wheelhouse/ and the source tree to the target, then:
+pip install --no-index --find-links wheelhouse -r requirements.lock.txt
+pip install --no-index --no-deps .
 ```
+
+Regenerate the lock file whenever `requirements.txt` changes:
+
+```bash
+python3.13 -m venv /tmp/lockvenv
+/tmp/lockvenv/bin/pip install -r requirements.txt
+/tmp/lockvenv/bin/pip freeze > requirements.lock.txt   # keep the header comment
+```
+
+`tests/test_packaging.py` fails if the lock file falls out of step with
+`requirements.txt`.
 
 Keep the native `libsnap7.so` / `snap7.dll` you built alongside the wheelhouse,
 and record its Snap7 version — it is the one component `pip` cannot restore.
