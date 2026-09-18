@@ -133,6 +133,129 @@ class TestAccessControl:
         run(scenario, tmp_path)
 
 
+class TestLoginPageRecovery:
+    """The sign-in page must never become permanently unsubmittable.
+
+    Regression: the CSRF-failure branch used to render a fresh token into the
+    form without setting the matching cookie, so once an operator hit one
+    failure - typically by leaving the page open while fetching the first-run
+    password - every later attempt failed too, on a perfectly good password.
+    """
+
+    def test_every_render_issues_a_matching_cookie(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            assert client.cookies.get("s7gw_login_csrf") == csrf_of(page.text)
+
+        run(scenario, tmp_path)
+
+    def test_an_expired_page_explains_itself_and_still_works(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            stale_token = csrf_of(page.text)
+            # The cookie outlives the page by design; simulate it expiring.
+            client.cookies.delete("s7gw_login_csrf")
+
+            response = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": runtime.bootstrap_password,
+                    "csrf_token": stale_token,
+                    "next": "/",
+                },
+            )
+            assert response.status_code == 400
+            assert "open too long" in response.text
+
+            # The page it hands back must be immediately usable.
+            retry = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": runtime.bootstrap_password,
+                    "csrf_token": csrf_of(response.text),
+                    "next": "/",
+                },
+            )
+            assert retry.status_code == 303, "the retry after an expiry must succeed"
+            assert retry.headers["location"] == "/password-change"
+
+        run(scenario, tmp_path)
+
+    def test_a_mismatched_token_is_also_recoverable(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await client.get("/login")
+            response = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": runtime.bootstrap_password,
+                    "csrf_token": "forged-token",
+                    "next": "/",
+                },
+            )
+            assert response.status_code == 400
+
+            retry = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": runtime.bootstrap_password,
+                    "csrf_token": csrf_of(response.text),
+                    "next": "/",
+                },
+            )
+            assert retry.status_code == 303
+
+        run(scenario, tmp_path)
+
+    def test_a_wrong_password_leaves_the_page_usable(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            await client.get("/login")
+            page = await client.get("/login")
+            wrong = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": "definitely-wrong",
+                    "csrf_token": csrf_of(page.text),
+                    "next": "/",
+                },
+            )
+            assert wrong.status_code == 401
+            assert "Incorrect username or password" in wrong.text
+
+            retry = await client.post(
+                "/login",
+                data={
+                    "username": "admin",
+                    "password": runtime.bootstrap_password,
+                    "csrf_token": csrf_of(wrong.text),
+                    "next": "/",
+                },
+            )
+            assert retry.status_code == 303
+
+        run(scenario, tmp_path)
+
+    def test_the_username_is_kept_across_a_retry(self, tmp_path) -> None:
+        async def scenario(client, runtime):
+            page = await client.get("/login")
+            response = await client.post(
+                "/login",
+                data={
+                    "username": "operator1",
+                    "password": "wrong",
+                    "csrf_token": csrf_of(page.text),
+                    "next": "/",
+                },
+            )
+            assert 'value="operator1"' in response.text
+
+        run(scenario, tmp_path)
+
+
 class TestFirstRunFlow:
     def test_login_without_a_csrf_token_is_rejected(self, tmp_path) -> None:
         async def scenario(client, runtime):

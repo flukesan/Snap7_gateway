@@ -40,6 +40,19 @@ StateProvider = Callable[[], Any]
 MAX_SNAPSHOT_FILES = 50
 DEFAULT_LOG_LINES = 500
 
+#: Transport failures that mean "the peer went away", not "the gateway broke".
+#: A browser closing a tab, a TLS warning page being dismissed, or DeviceWise
+#: dropping a socket all raise these, and on Windows the Proactor event loop
+#: reports them through the loop exception handler. Snapshotting them would
+#: bury real crashes under routine noise - the snapshot folder is capped, so
+#: junk entries actively push genuine ones out.
+ROUTINE_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    ConnectionResetError,
+    ConnectionAbortedError,
+    BrokenPipeError,
+    TimeoutError,
+)
+
 
 class CrashReporter:
     """Writes crash snapshots and tracks unclean shutdowns."""
@@ -276,19 +289,51 @@ def install_crash_handlers(reporter: CrashReporter) -> CrashReporter:
     return reporter
 
 
+def _is_routine_disconnect(exception: BaseException | None) -> bool:
+    """Whether an asyncio failure is just a peer hanging up."""
+    if exception is None:
+        return False
+    if isinstance(exception, ROUTINE_TRANSPORT_ERRORS):
+        return True
+    # SSL is optional at import time only in the sense that a build without it
+    # cannot raise these at all.
+    try:
+        import ssl
+
+        if isinstance(exception, (ssl.SSLError, ssl.SSLEOFError)):
+            return True
+    except ImportError:  # pragma: no cover - CPython always ships ssl
+        pass
+    # Windows reports a reset as OSError with WinError 10053/10054 in some paths.
+    return isinstance(exception, OSError) and getattr(exception, "winerror", None) in {
+        10053,
+        10054,
+        10058,
+    }
+
+
 def install_asyncio_handler(loop: Any, reporter: CrashReporter) -> None:
     """Capture exceptions that escape asyncio tasks."""
 
     def _handler(_loop: Any, context: dict[str, Any]) -> None:
         exception = context.get("exception")
+        message = context.get("message")
+
+        if _is_routine_disconnect(exception):
+            # Expected on any network service: log it and move on.
+            logger.debug(
+                "client connection dropped (%s): %s", type(exception).__name__, message
+            )
+            return
+
         exc_info = (
             (type(exception), exception, exception.__traceback__) if exception else None
         )
         reporter.write_snapshot(
             "asyncio_task_exception",
             exc_info,
-            extra={"message": context.get("message"), "future": str(context.get("future"))},
+            extra={"message": message, "future": str(context.get("future"))},
         )
-        logger.error("asyncio exception: %s", context.get("message"), exc_info=exception)
+        logger.error("asyncio exception: %s", message, exc_info=exception)
 
     loop.set_exception_handler(_handler)

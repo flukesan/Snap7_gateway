@@ -20,6 +20,12 @@ router = APIRouter()
 #: on, so the login form uses the classic double-submit pattern instead.
 LOGIN_CSRF_COOKIE = "s7gw_login_csrf"
 
+#: How long an unsubmitted sign-in page stays valid. This has to cover an
+#: operator opening the page, going to find the first-run password in the log or
+#: the manual, and coming back - ten minutes was not enough and produced a
+#: "could not be verified" error on a perfectly good password.
+LOGIN_CSRF_TTL_SECONDS = 3600
+
 
 def _safe_next(target: str | None) -> str:
     """Only allow same-site relative redirects after login."""
@@ -28,28 +34,54 @@ def _safe_next(target: str | None) -> str:
     return target
 
 
-@router.get("/login")
-async def login_form(request: Request, next: str = "/") -> Response:
-    context = deps.get_session(request)
-    if context is not None and not context.user.must_change_password:
-        return deps.redirect("/")
+def _render_login(
+    request: Request,
+    *,
+    next_url: str,
+    error: str | None = None,
+    username: str = "",
+    status_code: int = 200,
+) -> Response:
+    """Render the sign-in page and issue the matching CSRF cookie.
 
+    Every path that shows this page goes through here. Rendering a fresh token
+    into the form without also setting the cookie leaves the page permanently
+    unsubmittable - the token can never match - which is exactly the trap that
+    locked operators out of a first sign-in.
+    """
     csrf = secrets.token_urlsafe(32)
     response = render(
         request,
         "login.html",
-        {"next": _safe_next(next), "login_csrf": csrf, "hide_nav": True},
+        {
+            "next": _safe_next(next_url),
+            "login_csrf": csrf,
+            "error": error,
+            "username": username,
+            "hide_nav": True,
+        },
+        status_code=status_code,
     )
     response.set_cookie(
         LOGIN_CSRF_COOKIE,
         csrf,
         httponly=True,
         samesite="lax",
+        # Secure follows the real scheme so the cookie still works on an
+        # isolated bench running plain HTTP, and is always set over HTTPS.
         secure=request.url.scheme == "https",
-        max_age=600,
+        max_age=LOGIN_CSRF_TTL_SECONDS,
         path="/",
     )
     return response
+
+
+@router.get("/login")
+async def login_form(request: Request, next: str = "/") -> Response:
+    context = deps.get_session(request)
+    if context is not None and not context.user.must_change_password:
+        return deps.redirect("/")
+    return _render_login(request, next_url=next)
 
 
 @router.post("/login")
@@ -65,18 +97,21 @@ async def login_submit(
     ip = deps.client_ip(request)
 
     expected = request.cookies.get(LOGIN_CSRF_COOKIE)
-    if not expected or not secrets.compare_digest(expected, csrf_token or ""):
-        logger.warning("login CSRF check failed from %s", ip)
-        return render(
+    if not expected:
+        # The page sat open past the cookie's lifetime, or cookies are blocked.
+        # Recoverable: hand back a fresh page with a fresh cookie and say so.
+        logger.info("sign-in page expired before submission from %s", ip)
+        return _render_login(
             request,
-            "login.html",
-            {
-                "next": _safe_next(next),
-                "login_csrf": secrets.token_urlsafe(32),
-                "error": translator("msg.csrf"),
-                "hide_nav": True,
-            },
+            next_url=next,
+            error=translator("login.expired"),
+            username=username,
             status_code=400,
+        )
+    if not secrets.compare_digest(expected, csrf_token or ""):
+        logger.warning("login CSRF check failed from %s", ip)
+        return _render_login(
+            request, next_url=next, error=translator("msg.csrf"), status_code=400
         )
 
     result = runtime.auth.login(
@@ -86,24 +121,13 @@ async def login_submit(
         user_agent=request.headers.get("user-agent"),
     )
     if not result.ok or result.token is None:
-        csrf = secrets.token_urlsafe(32)
-        response = render(
+        return _render_login(
             request,
-            "login.html",
-            {
-                "next": _safe_next(next),
-                "login_csrf": csrf,
-                "error": result.error,
-                "username": username,
-                "hide_nav": True,
-            },
+            next_url=next,
+            error=result.error,
+            username=username,
             status_code=401,
         )
-        response.set_cookie(
-            LOGIN_CSRF_COOKIE, csrf, httponly=True, samesite="lax",
-            secure=request.url.scheme == "https", max_age=600, path="/",
-        )
-        return response
 
     destination = "/password-change" if result.must_change_password else _safe_next(next)
     response = deps.redirect(destination)

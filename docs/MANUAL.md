@@ -115,20 +115,33 @@ See `docs/build.md` for the Snap7 C library on each platform and architecture.
 
 ## 3. First run
 
-1. The service generates an `admin` account with a random 20-character password
-   and writes it to the log **once**:
+1. The service generates an `admin` account with a **random** 20-character
+   password and writes it to the log **once**. It looks like this:
 
    ```
    ========================================================================
    FIRST RUN: a default administrator account has been created.
      username: admin
-     password: 7kQ$mVr2Xp9wTz4nB!Ld
+     password: 7kQ$mVr2Xp9wTz4nB!Ld      <-- EXAMPLE ONLY, yours is different
    This password is shown ONCE and must be changed at first login ...
    ========================================================================
    ```
 
-   Find it with `journalctl -u snap7-gateway | grep -A4 "FIRST RUN"` or in
-   `<data-dir>/logs/gateway.log`.
+   > **The password above is an example.** Every installation generates its own,
+   > so it cannot be printed in a manual. Read *your* password out of *your*
+   > log:
+   >
+   > ```bash
+   > journalctl -u snap7-gateway | grep -A4 "FIRST RUN"      # Linux
+   > ```
+   > ```powershell
+   > Select-String -Path "$env:ProgramData\Snap7Gateway\logs\gateway.log" `
+   >   -Pattern "password:"                                  # Windows
+   > ```
+   >
+   > Running in the foreground? It is in the console output at startup.
+   > Lost it? See the bottom of this section - you can set a new one from the
+   > console without signing in.
 
 2. Open `https://<gateway-host>:8443/`. The certificate is self-signed on first
    run, so the browser will warn; accept it, or install your own certificate
@@ -620,3 +633,26 @@ every connection's state and a full thread dump.
 **Locked out.**
 `snap7-gateway unlock <user>` or `snap7-gateway reset-password <user>` on the
 host.
+
+**"This sign-in page had been open too long."**
+The sign-in form carries a one-hour anti-forgery token, and the page was open
+longer than that before you pressed *Log in*. Nothing is wrong with your
+password: the page that comes back with this message is already refreshed, so
+just type your details again and submit. If it keeps happening on a page you
+only just loaded, your browser is refusing cookies for this site - check that
+cookies are allowed for the gateway's address, and that you are using the same
+hostname throughout (a cookie set for `localhost` is not sent to `127.0.0.1`).
+
+**"Your session expired or the request could not be verified."**
+Same cause on the sign-in page, and equally harmless. Elsewhere in the UI it
+means your session ended while a form was open; sign in again and redo the
+action.
+
+**The first-run password from the manual does not work.**
+The password printed in section 3 is an *example*. Yours is generated randomly
+at first boot and appears only in your own log. If it is gone, set a new one on
+the gateway host:
+
+```bash
+snap7-gateway reset-password admin
+```
