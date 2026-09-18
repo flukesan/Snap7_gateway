@@ -44,12 +44,31 @@ journalctl -u snap7-gateway | grep -A4 "FIRST RUN"   # the one-time admin passwo
 Then open `https://<gateway-host>:8443/`, sign in as `admin`, and change the
 password — no other page is reachable until you do.
 
-For a bench run without installing:
+For a bench run without installing as a service:
 
 ```bash
-pip install -e ".[dev]"
+./scripts/setup-venv.sh --dev          # Linux / macOS
+.\scripts\setup-venv.ps1 -Dev          # Windows (PowerShell)
+
+source .venv/bin/activate
 snap7-gateway run --data-dir ./gw-data --port 8443
 ```
+
+The script needs Python 3.13+, creates `.venv`, installs the pinned
+requirements and checks that the Snap7 client library loads. To do it by hand:
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/pip install -r requirements.txt   # or requirements-dev.txt
+.venv/bin/pip install --no-deps -e .
+```
+
+| File | Contents |
+| --- | --- |
+| `requirements.txt` | Runtime dependencies, pinned exactly |
+| `requirements-dev.txt` | The above plus pytest, httpx, ruff |
+| `requirements-windows.txt` | The above plus pywin32 |
+| `requirements.lock.txt` | Every transitive package pinned, for air-gapped or audited installs |
 
 ## Documentation
 

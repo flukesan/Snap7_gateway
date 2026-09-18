@@ -2,6 +2,7 @@
 # Install the Snap7 Industrial Gateway as a systemd service.
 #
 #   sudo ./install.sh [/path/to/source]
+#   sudo LOCKED=1 ./install.sh          # pin every transitive package too
 #
 # Creates a dedicated unprivileged account, installs the package into its own
 # virtualenv under /opt, and enables the unit. Re-running upgrades in place and
@@ -40,7 +41,17 @@ echo "==> Installing into ${PREFIX}"
 install -d -m 0755 "${PREFIX}"
 python3 -m venv "${PREFIX}/venv"
 "${PREFIX}/venv/bin/pip" install --upgrade pip >/dev/null
-"${PREFIX}/venv/bin/pip" install "${SOURCE_DIR}"
+
+# Install the pinned dependency set first, then the gateway itself with
+# --no-deps: requirements.txt has already decided every version, and letting
+# pip re-resolve here would silently defeat those pins.
+REQUIREMENTS="${SOURCE_DIR}/requirements.txt"
+if [[ -f "${SOURCE_DIR}/requirements.lock.txt" && -n "${LOCKED:-}" ]]; then
+  REQUIREMENTS="${SOURCE_DIR}/requirements.lock.txt"
+  echo "    using the fully pinned lock file"
+fi
+"${PREFIX}/venv/bin/pip" install -r "${REQUIREMENTS}"
+"${PREFIX}/venv/bin/pip" install --no-deps "${SOURCE_DIR}"
 install -d -m 0755 "${PREFIX}/docs"
 cp -r "${SOURCE_DIR}/docs/." "${PREFIX}/docs/" 2>/dev/null || true
 

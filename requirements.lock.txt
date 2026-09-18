@@ -1,0 +1,46 @@
+# Fully pinned dependency set - every package, including transitive ones.
+#
+# Generated from a clean virtualenv containing only requirements.txt:
+#
+#   python3.13 -m venv /tmp/lockvenv
+#   /tmp/lockvenv/bin/pip install -r requirements.txt
+#   /tmp/lockvenv/bin/pip freeze > requirements.lock.txt
+#
+# Use this for reproducible or audited installations, and to build a
+# wheelhouse for an air-gapped site (see docs/build.md section 9):
+#
+#   pip download -d wheelhouse -r requirements.lock.txt
+#   pip install --no-index --find-links wheelhouse -r requirements.lock.txt
+#
+# Regenerate it whenever requirements.txt changes. Linux/CPython 3.13;
+# a Windows host resolves a slightly different set (no uvloop) and also
+# needs requirements-windows.txt.
+
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.1.0
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.1
+fastapi==0.141.1
+h11==0.16.0
+httptools==0.8.0
+idna==3.20
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+pycparser==3.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+python-dotenv==1.2.3
+python-multipart==0.0.32
+python-snap7==3.1.2
+PyYAML==6.0.3
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.53.0
+uvloop==0.22.1
+watchfiles==1.2.0
+websockets==17.1

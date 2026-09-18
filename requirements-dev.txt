@@ -1,0 +1,16 @@
+# Development and test dependencies.
+#
+#   pip install -r requirements-dev.txt
+#   pytest tests/ -q
+#
+# The suite needs no PLC hardware: it runs the client role against a Snap7
+# server simulator and reads back through the gateway's own virtual S7 CPU.
+
+-r requirements.txt
+
+# Test runner.
+pytest==9.1.1
+# Drives the FastAPI app in-process through its ASGI transport.
+httpx==0.28.1
+# Linting (unused imports, undefined names, syntax errors).
+ruff==0.16.8

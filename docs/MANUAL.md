@@ -65,9 +65,49 @@ Remove with `.\install\windows\uninstall-service.ps1` (add `-Purge`).
 
 ### 2.3 Running in the foreground (commissioning, bench work)
 
+Set up a virtualenv with the pinned dependencies:
+
 ```bash
-snap7-gateway run --data-dir /tmp/gw-test --port 8443
+./scripts/setup-venv.sh --dev          # Linux / macOS
+.\scripts\setup-venv.ps1 -Dev          # Windows (PowerShell)
 ```
+
+The script picks a Python 3.13+ interpreter, creates `.venv`, installs the
+requirements, installs the gateway itself, and checks that the Snap7 client
+library loads. Options: `--dev` / `-Dev` adds the test tooling, `--locked` /
+`-Locked` pins every transitive package as well, and `--venv DIR` / `-VenvDir`
+puts the environment somewhere else.
+
+Then:
+
+```bash
+source .venv/bin/activate
+snap7-gateway run --data-dir ./gw-data --port 8443
+```
+
+### 2.4 Dependency files
+
+| File | Contents |
+| --- | --- |
+| `requirements.txt` | Runtime dependencies, pinned exactly. What a deployment installs |
+| `requirements-dev.txt` | The above plus pytest, httpx and ruff |
+| `requirements-windows.txt` | The above plus pywin32 for the Windows service |
+| `requirements.lock.txt` | Every package including transitive ones, pinned — for reproducible, audited or air-gapped installations |
+| `pyproject.toml` | The version *ranges* the project is compatible with, and the package metadata |
+
+Install by hand instead of using the script:
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install --no-deps -e .
+```
+
+`--no-deps` on the second line is deliberate: the requirements file has already
+decided every version, and letting pip re-resolve would quietly defeat the pins.
+
+A test (`tests/test_packaging.py`) fails if `requirements.txt` and
+`pyproject.toml` ever drift apart, or if the lock file goes stale.
 
 See `docs/build.md` for the Snap7 C library on each platform and architecture.
 

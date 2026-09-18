@@ -1,0 +1,42 @@
+# Snap7 Industrial Gateway - runtime dependencies
+#
+# Versions are pinned exactly so a gateway installed on a factory PC today and
+# one installed next year run identical code. `pyproject.toml` keeps the looser
+# ">=" ranges that describe what the project is actually compatible with; this
+# file is the deployment decision.
+#
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements.txt      # Linux / macOS
+#   .venv\Scripts\pip install -r requirements.txt  # Windows
+#
+# Then install the gateway itself (adds the `snap7-gateway` command):
+#   pip install --no-deps -e .
+#
+# Requires Python 3.13 or newer.
+#
+# Related files:
+#   requirements-dev.txt      also installs the test tooling
+#   requirements-windows.txt  adds pywin32 for the Windows service
+#   requirements.lock.txt     every transitive package pinned, for air-gapped
+#                             or audited installations
+
+# --- PLC communication -------------------------------------------------
+# Wraps the Snap7 C library for the client role. In 3.x the *server* role is
+# pure Python, so the virtual S7 CPU needs no native library; the client role
+# still does. See docs/build.md.
+python-snap7==3.1.2
+
+# --- Web configuration UI ----------------------------------------------
+fastapi==0.141.1
+# The [standard] extra brings uvloop and httptools, which measurably reduce
+# CPU on an edge device.
+uvicorn[standard]==0.53.0
+jinja2==3.1.6
+# Required by FastAPI to parse the HTML form posts the UI is built on.
+python-multipart==0.0.32
+
+# --- Security ----------------------------------------------------------
+# Argon2id password hashing.
+argon2-cffi==25.1.0
+# Generates the self-signed TLS certificate on first run.
+cryptography==50.0.1

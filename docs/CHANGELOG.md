@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `requirements.txt`, `requirements-dev.txt` and `requirements-windows.txt`
+  with exact version pins, so a gateway installed today and one installed next
+  year run identical code. `pyproject.toml` keeps the compatible-range
+  declarations.
+- `requirements.lock.txt` pinning every transitive package, for reproducible,
+  audited or air-gapped installations and for building a wheelhouse.
+- `scripts/setup-venv.sh` and `scripts/setup-venv.ps1`: locate a Python 3.13+
+  interpreter, create the virtualenv, install the pinned requirements and the
+  gateway, and verify that the Snap7 client library loads and the CLI runs.
+- `tests/test_packaging.py` (24 tests) failing the build if `requirements.txt`
+  and `pyproject.toml` drift apart, if a version is not pinned exactly, if the
+  lock file goes stale, or if pywin32 leaks into a file used on Linux.
+
+### Changed
+- `install/linux/install.sh` and `install/windows/install-service.ps1` now
+  install the pinned requirements first and then the gateway with `--no-deps`,
+  so pip cannot silently re-resolve past the pins. `LOCKED=1` on the Linux
+  script uses the fully pinned lock file.
+
 ## [0.1.0] - 2026-09-18
 
 First working gateway: polls real PLCs, re-hosts them as a virtual S7 CPU for

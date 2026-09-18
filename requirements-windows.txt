@@ -1,0 +1,18 @@
+# Windows deployment: runtime dependencies plus native service support.
+#
+#   py -3.13 -m venv .venv
+#   .venv\Scripts\pip install -r requirements-windows.txt
+#   .venv\Scripts\pip install --no-deps -e .
+#
+# pywin32 is what registers the gateway as a real Windows service with
+# restart-on-failure (see install\windows\install-service.ps1). It is kept out
+# of requirements.txt because it has no Linux wheel.
+#
+# NOTE: this pin is the current PyPI release, but it could not be installed or
+# tested from the Linux build host, unlike every pin in requirements.txt. Verify
+# it on the target machine the first time you deploy, and see
+# docs/release-checklist.md section 2.
+
+-r requirements.txt
+
+pywin32==312
