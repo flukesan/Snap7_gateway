@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="{{ t.locale }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ t('app.title') }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-title">{{ t('app.title') }}</div>
+  {% if session and not hide_nav %}
+  <div class="masthead-user">
+    {{ t('nav.signed_in_as') }} <strong>{{ user.username }}</strong> ({{ user.role }})
+    <form method="post" action="/logout" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="link-button">{{ t('nav.logout') }}</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+
+{% if session and not hide_nav %}
+<nav class="mainnav">
+  <ul>
+    <li><a href="/" {% if current_path == '/' %}class="active"{% endif %}>{{ t('nav.status') }}</a></li>
+    <li><a href="/connections" {% if current_path.startswith('/connections') %}class="active"{% endif %}>{{ t('nav.connections') }}</a></li>
+    <li><a href="/tags" {% if current_path.startswith('/tags') %}class="active"{% endif %}>{{ t('nav.tags') }}</a></li>
+    <li><a href="/devicewise" {% if current_path.startswith('/devicewise') %}class="active"{% endif %}>{{ t('nav.devicewise') }}</a></li>
+    <li><a href="/tools" {% if current_path.startswith('/tools') %}class="active"{% endif %}>{{ t('nav.tools') }}</a></li>
+    <li><a href="/security" {% if current_path.startswith('/security') or current_path.startswith('/users') %}class="active"{% endif %}>{{ t('nav.users') }}</a></li>
+    <li><a href="/logs" {% if current_path.startswith('/logs') %}class="active"{% endif %}>{{ t('nav.logs') }}</a></li>
+    <li><a href="/audit" {% if current_path.startswith('/audit') %}class="active"{% endif %}>{{ t('nav.audit') }}</a></li>
+  </ul>
+</nav>
+{% endif %}
+
+<main>
+  {% if flashes %}
+  <div class="flashes">
+    {% for flash in flashes %}
+    <p class="flash flash-{{ flash.level }}">{{ flash.message }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  Snap7 Industrial Gateway &mdash; PLC data bridge to DeviceWise
+</footer>
+<script src="/static/app.js" defer></script>
+</body>
+</html>

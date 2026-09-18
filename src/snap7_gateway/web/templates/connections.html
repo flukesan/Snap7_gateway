@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ t('conn.heading') }}{% endblock %}
+{% block content %}
+<h1>{{ t('conn.heading') }}</h1>
+
+{% if user.role == 'admin' %}
+<p><a href="/connections/new" class="button">{{ t('action.add') }}</a></p>
+{% endif %}
+
+{% if connections %}
+<table>
+  <thead>
+    <tr>
+      <th>{{ t('common.name') }}</th><th>{{ t('conn.host') }}</th>
+      <th>{{ t('conn.rack') }}/{{ t('conn.slot') }}</th><th>{{ t('conn.type') }}</th>
+      <th>{{ t('conn.poll') }}</th><th>{{ t('conn.exposure') }}</th>
+      <th>{{ t('common.status') }}</th><th>{{ t('conn.last_success') }}</th>
+      <th>{{ t('common.actions') }}</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for connection in connections %}
+    {% set h = health.get(connection.id) %}
+    <tr>
+      <td>{{ connection.name }}{% if not connection.enabled %} ({{ t('state.disabled') }}){% endif %}</td>
+      <td>{{ connection.host }}:{{ connection.tcp_port }}</td>
+      <td>{{ connection.rack }}/{{ connection.slot }}</td>
+      <td>{{ connection.connection_type }}</td>
+      <td>{{ connection.poll_interval_ms }} ms</td>
+      <td>{{ t('conn.exposure.' ~ connection.exposure_mode) }}</td>
+      <td class="state state-{{ h.state if h else 'stopped' }}">
+        {{ t.state(h.state) if h else t('state.stopped') }}
+      </td>
+      <td>{{ fmt_ts(h.last_success_at) if h else '-' }}</td>
+      <td class="actions">
+        {% if user.role == 'admin' %}
+        <a href="/connections/{{ connection.id }}/edit">{{ t('action.edit') }}</a>
+        <form method="post" action="/connections/{{ connection.id }}/test" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="link-button">{{ t('action.test') }}</button>
+        </form>
+        <form method="post" action="/connections/{{ connection.id }}/delete" class="inline"
+              data-confirm="Delete connection '{{ connection.name }}'?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
+        </form>
+        {% else %}-{% endif %}
+      </td>
+    </tr>
+    {% if h and h.last_error %}
+    <tr class="subrow"><td colspan="9" class="bad wrap">{{ h.last_error }}</td></tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{{ t('conn.none') }}</p>
+{% endif %}
+{% endblock %}

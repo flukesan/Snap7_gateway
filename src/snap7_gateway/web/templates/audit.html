@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.audit') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.audit') }}</h1>
+<p class="hint">Every configuration change is recorded here: who, what, when and from where.</p>
+
+{% if entries %}
+<table>
+  <thead>
+    <tr><th>{{ t('common.time') }}</th><th>{{ t('common.user') }}</th><th>Action</th>
+        <th>Target</th><th>Detail</th><th>Source</th></tr>
+  </thead>
+  <tbody>
+  {% for entry in entries %}
+    <tr>
+      <td class="mono">{{ fmt_ts(entry.ts) }}</td>
+      <td>{{ entry.username }}</td>
+      <td class="mono">{{ entry.action }}</td>
+      <td>{{ entry.target or '-' }}</td>
+      <td class="wrap"><small>{{ entry.detail or '-' }}</small></td>
+      <td class="mono">{{ entry.ip or '-' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<p class="pager">
+  {% if page > 1 %}<a href="/audit?page={{ page - 1 }}">Previous</a>{% endif %}
+  <span>Page {{ page }}</span>
+  {% if has_next %}<a href="/audit?page={{ page + 1 }}">Next</a>{% endif %}
+</p>
+{% else %}
+<p>No audit entries recorded yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.tools') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.tools') }}</h1>
+<p class="hint">Read a live value straight from a PLC. The address does not have to be saved as a
+   tag first, which is what you want while commissioning on the factory floor.</p>
+
+{% if connections %}
+<form method="post" action="/tools/read">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="connection_id">{{ t('nav.connections') }}</label>
+  <select id="connection_id" name="connection_id">
+    {% for connection in connections %}
+    <option value="{{ connection.id }}"
+      {% if values.connection_id|string == connection.id|string %}selected{% endif %}>
+      {{ connection.name }} ({{ connection.host }})</option>
+    {% endfor %}
+  </select>
+  {% if errors.connection_id %}<p class="field-error">{{ errors.connection_id }}</p>{% endif %}
+
+  <div class="grid">
+    <div>
+      <label for="area_type">Area</label>
+      <select id="area_type" name="area_type">
+        {% for option in area_types %}
+        <option value="{{ option }}" {% if values.area_type == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.area_type %}<p class="field-error">{{ errors.area_type }}</p>{% endif %}
+    </div>
+    <div>
+      <label for="db_number">DB number</label>
+      <input type="number" id="db_number" name="db_number" value="{{ values.db_number }}" min="1" max="65535">
+      {% if errors.db_number %}<p class="field-error">{{ errors.db_number }}</p>{% endif %}
+    </div>
+    <div>
+      <label for="byte_offset">Byte offset</label>
+      <input type="number" id="byte_offset" name="byte_offset" value="{{ values.byte_offset }}" min="0">
+      {% if errors.byte_offset %}<p class="field-error">{{ errors.byte_offset }}</p>{% endif %}
+    </div>
+    <div>
+      <label for="bit_offset">Bit (BOOL only)</label>
+      <input type="number" id="bit_offset" name="bit_offset" value="{{ values.bit_offset }}" min="0" max="7">
+      {% if errors.bit_offset %}<p class="field-error">{{ errors.bit_offset }}</p>{% endif %}
+    </div>
+    <div>
+      <label for="data_type">{{ t('common.type') }}</label>
+      <select id="data_type" name="data_type">
+        {% for option in data_types %}
+        <option value="{{ option }}" {% if values.data_type == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+      {% if errors.data_type %}<p class="field-error">{{ errors.data_type }}</p>{% endif %}
+    </div>
+    <div>
+      <label for="length">Length (STRING only)</label>
+      <input type="number" id="length" name="length" value="{{ values.length }}" min="1" max="254">
+      {% if errors.length %}<p class="field-error">{{ errors.length }}</p>{% endif %}
+    </div>
+  </div>
+
+  <button type="submit">{{ t('action.read') }}</button>
+</form>
+
+{% if result %}
+<section>
+  <h2>Result</h2>
+  {% if result.ok %}
+  <table class="kv">
+    <tr><th>{{ t('common.value') }}</th><td class="value">{{ result.value }}</td></tr>
+    <tr><th>Raw bytes</th><td class="mono">{{ result.raw }}</td></tr>
+    <tr><th>Bytes read</th><td>{{ result.bytes }}</td></tr>
+    <tr><th>Source</th><td>{{ result.source }}</td></tr>
+  </table>
+  {% else %}
+  <p class="flash flash-error">{{ result.error }}</p>
+  {% endif %}
+</section>
+{% endif %}
+{% else %}
+<p>{{ t('conn.none') }} <a href="/connections/new">{{ t('action.add') }}</a></p>
+{% endif %}
+{% endblock %}

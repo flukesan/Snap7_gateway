@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.users') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.users') }}</h1>
+
+<section>
+  <h2>Accounts</h2>
+  <table>
+    <thead>
+      <tr><th>{{ t('common.user') }}</th><th>Role</th><th>{{ t('common.enabled') }}</th>
+          <th>Must change password</th><th>Last sign-in</th><th>Locked until</th>
+          <th>{{ t('common.actions') }}</th></tr>
+    </thead>
+    <tbody>
+    {% for account in users %}
+      <tr>
+        <td>{{ account.username }}</td>
+        <td>{{ account.role }}</td>
+        <td>{{ t('common.yes') if account.enabled else t('common.no') }}</td>
+        <td>{{ t('common.yes') if account.must_change_password else t('common.no') }}</td>
+        <td>{{ fmt_ts(account.last_login_at) }}</td>
+        <td>{{ fmt_ts(account.locked_until) }}</td>
+        <td class="actions">
+          {% if user.role == 'admin' %}
+          <form method="post" action="/users/{{ account.id }}/role" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="role">
+              {% for role in roles %}
+              <option value="{{ role }}" {% if account.role == role %}selected{% endif %}>{{ role }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="link-button">{{ t('action.save') }}</button>
+          </form>
+          <form method="post" action="/users/{{ account.id }}/enabled" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="enabled" value="{{ '0' if account.enabled else '1' }}">
+            <button type="submit" class="link-button">
+              {{ 'Disable' if account.enabled else 'Enable' }}</button>
+          </form>
+          {% if account.locked_until %}
+          <form method="post" action="/users/{{ account.id }}/unlock" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button">Unlock</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/users/{{ account.id }}/delete" class="inline"
+                data-confirm="Delete user '{{ account.username }}'?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button danger">{{ t('action.delete') }}</button>
+          </form>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% if user.role == 'admin' %}
+      <tr class="subrow">
+        <td colspan="7">
+          <form method="post" action="/users/{{ account.id }}/reset" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="reset-{{ account.id }}">Reset password for {{ account.username }}</label>
+            <input type="password" id="reset-{{ account.id }}" name="new_password"
+                   autocomplete="new-password" required>
+            <button type="submit">Reset</button>
+          </form>
+        </td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if user.role == 'admin' %}
+  <h3>{{ t('action.add') }}</h3>
+  <form method="post" action="/users/new" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid">
+      <div>
+        <label for="new_username">{{ t('common.user') }}</label>
+        <input type="text" id="new_username" name="username" required maxlength="32">
+      </div>
+      <div>
+        <label for="new_password">{{ t('login.password') }}</label>
+        <input type="password" id="new_password" name="password" required autocomplete="new-password">
+      </div>
+      <div>
+        <label for="new_role">Role</label>
+        <select id="new_role" name="role">
+          {% for role in roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <p class="hint">A <strong>viewer</strong> can see status, tags and logs but cannot change any
+       configuration. New accounts must change their password at first sign-in.</p>
+    <button type="submit">{{ t('action.add') }}</button>
+  </form>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{{ t('pwchange.rules') }}</h2>
+  <ul class="rules">{% for rule in policy_rules %}<li>{{ rule }}</li>{% endfor %}</ul>
+  <p><a href="/password-change">{{ t('action.change_password') }}</a></p>
+</section>
+
+<section>
+  <h2>TLS certificate</h2>
+  <table class="kv">
+    {% for key, value in certificate.items() %}
+    <tr><th>{{ key }}</th><td class="wrap mono">{{ value }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+{% if user.role == 'admin' %}
+<section>
+  <h2>Security settings</h2>
+  <form method="post" action="/security">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <fieldset>
+      <legend>Presentation</legend>
+      <label for="locale">Language / ภาษา</label>
+      <select id="locale" name="locale">
+        {% for code in supported_locales %}
+        <option value="{{ code }}" {% if settings.locale == code %}selected{% endif %}>
+          {{ locale_names[code] }}</option>
+        {% endfor %}
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sessions</legend>
+      <div class="grid">
+        <div>
+          <label for="session_idle_timeout_minutes">Idle timeout (minutes)</label>
+          <input type="number" id="session_idle_timeout_minutes" name="session_idle_timeout_minutes"
+                 value="{{ settings.session_idle_timeout_minutes }}" min="1" max="1440">
+        </div>
+        <div>
+          <label for="session_absolute_timeout_hours">Absolute lifetime (hours)</label>
+          <input type="number" id="session_absolute_timeout_hours" name="session_absolute_timeout_hours"
+                 value="{{ settings.session_absolute_timeout_hours }}" min="1" max="168">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sign-in protection</legend>
+      <div class="grid">
+        <div>
+          <label for="login_max_failures">Failures before lockout</label>
+          <input type="number" id="login_max_failures" name="login_max_failures"
+                 value="{{ settings.login_max_failures }}" min="1" max="100">
+        </div>
+        <div>
+          <label for="login_lockout_minutes">Lockout duration (minutes)</label>
+          <input type="number" id="login_lockout_minutes" name="login_lockout_minutes"
+                 value="{{ settings.login_lockout_minutes }}" min="1" max="1440">
+        </div>
+        <div>
+          <label for="login_rate_max_attempts">Attempts per window (per source IP)</label>
+          <input type="number" id="login_rate_max_attempts" name="login_rate_max_attempts"
+                 value="{{ settings.login_rate_max_attempts }}" min="1" max="1000">
+        </div>
+        <div>
+          <label for="login_rate_window_seconds">Rate-limit window (seconds)</label>
+          <input type="number" id="login_rate_window_seconds" name="login_rate_window_seconds"
+                 value="{{ settings.login_rate_window_seconds }}" min="5" max="3600">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Password policy</legend>
+      <label for="password_min_length">Minimum length (never below 12)</label>
+      <input type="number" id="password_min_length" name="password_min_length"
+             value="{{ settings.password_min_length }}" min="12" max="128">
+      <label><input type="checkbox" name="password_require_lower" value="1"
+        {% if settings.password_require_lower == 'true' %}checked{% endif %}> Require a lower-case letter</label>
+      <label><input type="checkbox" name="password_require_upper" value="1"
+        {% if settings.password_require_upper == 'true' %}checked{% endif %}> Require an upper-case letter</label>
+      <label><input type="checkbox" name="password_require_digit" value="1"
+        {% if settings.password_require_digit == 'true' %}checked{% endif %}> Require a digit</label>
+      <label><input type="checkbox" name="password_require_symbol" value="1"
+        {% if settings.password_require_symbol == 'true' %}checked{% endif %}> Require a symbol</label>
+      <label><input type="checkbox" name="password_forbid_username" value="1"
+        {% if settings.password_forbid_username == 'true' %}checked{% endif %}> Must not contain the username</label>
+      <label><input type="checkbox" name="password_forbid_previous" value="1"
+        {% if settings.password_forbid_previous == 'true' %}checked{% endif %}> Must differ from the previous password</label>
+      <label><input type="checkbox" name="password_use_blocklist" value="1"
+        {% if settings.password_use_blocklist == 'true' %}checked{% endif %}> Reject common passwords</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Web server (restart required)</legend>
+      <div class="grid">
+        <div>
+          <label for="web_host">Bind address</label>
+          <input type="text" id="web_host" name="web_host" value="{{ settings.web_host }}">
+        </div>
+        <div>
+          <label for="web_port">Port</label>
+          <input type="number" id="web_port" name="web_port" value="{{ settings.web_port }}" min="1" max="65535">
+        </div>
+      </div>
+      <label><input type="checkbox" name="https_enabled" value="1"
+        {% if settings.https_enabled == 'true' %}checked{% endif %}> Serve over HTTPS (recommended)</label>
+      <label for="tls_cert_path">Certificate path ({{ t('common.optional') }}, blank = self-signed)</label>
+      <input type="text" id="tls_cert_path" name="tls_cert_path" value="{{ settings.tls_cert_path }}">
+      <label for="tls_key_path">Private key path ({{ t('common.optional') }})</label>
+      <input type="text" id="tls_key_path" name="tls_key_path" value="{{ settings.tls_key_path }}">
+    </fieldset>
+
+    <button type="submit">{{ t('action.save') }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

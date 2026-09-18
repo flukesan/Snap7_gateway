@@ -1,0 +1,264 @@
+"""Tag Mapping: discovered areas, exposure whitelist and named tags."""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
+
+from ...core.datastore import AreaKey
+from ...core.validation import validate_tag
+from ...db.models import AreaStatus, AreaType, ExposureMode
+from ...plc.decoding import DataType, DecodeError, decode, format_value
+from .. import deps
+from ..templating import render
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/tags")
+
+
+def _selected_connection(request: Request, connection_id: int | None):
+    runtime = deps.get_runtime(request)
+    connections = runtime.db.list_connections()
+    if not connections:
+        return None, connections
+    if connection_id is None:
+        return connections[0], connections
+    match = next((c for c in connections if c.id == connection_id), None)
+    return match or connections[0], connections
+
+
+@router.get("")
+async def tag_mapping(request: Request, connection_id: int | None = None) -> Response:
+    runtime = deps.get_runtime(request)
+    connection, connections = _selected_connection(request, connection_id)
+    areas = runtime.db.list_areas(connection.id) if connection else []
+    tags = runtime.db.list_tags(connection.id) if connection else []
+
+    # Live view: current value per tag and registration state per area, so the
+    # operator can see at a glance what DeviceWise is actually being served.
+    registered = {
+        (r.key.area_type, r.key.db_number)
+        for r in runtime.vplc.registrations()
+        if connection and r.key.connection_id == connection.id
+    }
+    snapshots = {}
+    if connection:
+        for area in areas:
+            key = AreaKey(connection.id, str(area.area_type), area.db_number)
+            snapshots[area.id] = runtime.store.get(key)
+
+    tag_values = []
+    for tag in tags:
+        key = AreaKey(connection.id, str(tag.area_type), tag.db_number)
+        snapshot = runtime.store.get(key)
+        value = "-"
+        note = ""
+        if snapshot is None:
+            note = "not polled"
+        elif not snapshot.ok:
+            note = snapshot.error or "read failed"
+        else:
+            try:
+                raw = decode(
+                    snapshot.data, tag.data_type, tag.byte_offset, tag.bit_offset, tag.length
+                )
+                value = format_value(raw, tag.data_type)
+                note = f"{snapshot.age():.1f}s old"
+            except DecodeError as exc:
+                note = str(exc)
+        tag_values.append({"tag": tag, "value": value, "note": note})
+
+    return render(
+        request,
+        "tags.html",
+        {
+            "connection": connection,
+            "connections": connections,
+            "areas": areas,
+            "snapshots": snapshots,
+            "registered": registered,
+            "tag_values": tag_values,
+            "data_types": [t.value for t in DataType],
+            "area_types": [t.value for t in AreaType],
+            "mirror_all": bool(connection and connection.exposure_mode == ExposureMode.MIRROR_ALL),
+        },
+    )
+
+
+@router.post("/rescan", dependencies=[Depends(deps.require_csrf)])
+async def rescan(
+    request: Request, user: object = Depends(deps.require_admin)
+) -> Response:
+    """Queue a block rescan (CLAUDE.md section 4.7)."""
+    runtime = deps.get_runtime(request)
+    form = await request.form()
+    raw_id = form.get("connection_id")
+    connection_id = int(raw_id) if raw_id and str(raw_id).isdigit() else None
+
+    signalled = runtime.connections.request_rescan(connection_id)
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "discovery.rescan_requested",
+        str(connection_id) if connection_id else "all connections",
+        f"{len(signalled)} worker(s) signalled",
+        deps.client_ip(request),
+    )
+    translator = deps.get_translator(request)
+    if signalled:
+        deps.flash(request, "ok", translator("tags.rescan_queued", count=len(signalled)))
+    else:
+        deps.flash(
+            request,
+            "error",
+            "No running connection to rescan. Enable a connection and wait for it to connect.",
+        )
+    target = f"/tags?connection_id={connection_id}" if connection_id else "/tags"
+    return deps.redirect(target)
+
+
+@router.post("/areas/{area_id}/exposure", dependencies=[Depends(deps.require_csrf)])
+async def set_exposure(
+    request: Request, area_id: int, user: object = Depends(deps.require_admin)
+) -> Response:
+    """Whitelist or un-whitelist one area.
+
+    Exposure is enforced at registration time: un-exposing an area makes the
+    sync task unregister it, after which DeviceWise cannot even enumerate it.
+    """
+    runtime = deps.get_runtime(request)
+    area = runtime.db.get_area_by_id(area_id)
+    if area is None:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+
+    form = await request.form()
+    exposed = str(form.get("exposed", "")).lower() in {"1", "true", "on", "yes"}
+    runtime.db.set_area_exposed(area_id, exposed)
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "area.exposure",
+        f"connection {area.connection_id}/{area.key}",
+        f"exposed={exposed}",
+        deps.client_ip(request),
+    )
+    runtime.sync.request_refresh()
+    deps.flash(
+        request,
+        "ok",
+        f"{area.key} is now {'exposed to' if exposed else 'hidden from'} DeviceWise.",
+    )
+    return deps.redirect(f"/tags?connection_id={area.connection_id}")
+
+
+@router.post("/areas/{area_id}/confirm-shape", dependencies=[Depends(deps.require_csrf)])
+async def confirm_shape(
+    request: Request, area_id: int, user: object = Depends(deps.require_admin)
+) -> Response:
+    """Accept a changed block size and let the virtual CPU re-register it.
+
+    Until this is confirmed, a shrunk area keeps its previously registered size
+    so a live DeviceWise consumer's tag shapes stay valid.
+    """
+    runtime = deps.get_runtime(request)
+    area = runtime.db.get_area_by_id(area_id)
+    if area is None:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+
+    runtime.db.set_area_status(area_id, AreaStatus.OK, None)
+    key = AreaKey(area.connection_id, str(area.area_type), area.db_number)
+    runtime.vplc.unregister(key, reason="operator confirmed the new size")
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "area.shape_confirmed",
+        f"connection {area.connection_id}/{area.key}",
+        f"size={area.size_bytes}",
+        deps.client_ip(request),
+    )
+    runtime.sync.request_refresh()
+    deps.flash(request, "ok", f"{area.key} will be re-registered at {area.size_bytes} bytes.")
+    return deps.redirect(f"/tags?connection_id={area.connection_id}")
+
+
+@router.post("/areas/{area_id}/delete", dependencies=[Depends(deps.require_csrf)])
+async def delete_area(
+    request: Request, area_id: int, user: object = Depends(deps.require_admin)
+) -> Response:
+    """Forget an area that is gone from the PLC for good."""
+    runtime = deps.get_runtime(request)
+    area = runtime.db.get_area_by_id(area_id)
+    if area is None:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+
+    key = AreaKey(area.connection_id, str(area.area_type), area.db_number)
+    runtime.vplc.unregister(key, reason="area removed by operator")
+    runtime.store.drop(key)
+    runtime.db.delete_area(area_id)
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "area.delete",
+        f"connection {area.connection_id}/{area.key}",
+        None,
+        deps.client_ip(request),
+    )
+    runtime.sync.request_refresh()
+    deps.flash(request, "ok", f"{area.key} removed from the tag map.")
+    return deps.redirect(f"/tags?connection_id={area.connection_id}")
+
+
+@router.post("/new", dependencies=[Depends(deps.require_csrf)])
+async def create_tag(request: Request, user: object = Depends(deps.require_admin)) -> Response:
+    runtime = deps.get_runtime(request)
+    form = dict(await request.form())
+    try:
+        connection_id = int(str(form.get("connection_id", "")))
+    except ValueError:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+
+    connection = runtime.db.get_connection(connection_id)
+    if connection is None:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+
+    existing = {t.name.lower() for t in runtime.db.list_tags(connection_id)}
+    values, errors = validate_tag(form, existing_names=existing)
+    if errors:
+        deps.flash_errors(request, errors.values())
+        return deps.redirect(f"/tags?connection_id={connection_id}")
+
+    tag = runtime.db.create_tag(connection_id, values)
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "tag.create",
+        f"{connection.name}/{tag.name}",
+        f"{tag.address} {tag.data_type}",
+        deps.client_ip(request),
+    )
+    deps.flash(request, "ok", f"Tag '{tag.name}' added at {tag.address}.")
+    return deps.redirect(f"/tags?connection_id={connection_id}")
+
+
+@router.post("/{tag_id}/delete", dependencies=[Depends(deps.require_csrf)])
+async def delete_tag(
+    request: Request, tag_id: int, user: object = Depends(deps.require_admin)
+) -> Response:
+    runtime = deps.get_runtime(request)
+    tag = runtime.db.get_tag(tag_id)
+    if tag is None:
+        deps.flash(request, "error", deps.get_translator(request)("msg.not_found"))
+        return deps.redirect("/tags")
+    runtime.db.delete_tag(tag_id)
+    runtime.db.audit(
+        user.username,  # type: ignore[attr-defined]
+        "tag.delete",
+        tag.name,
+        tag.address,
+        deps.client_ip(request),
+    )
+    deps.flash(request, "ok", f"Tag '{tag.name}' deleted.")
+    return deps.redirect(f"/tags?connection_id={tag.connection_id}")
